@@ -33,3 +33,9 @@ Desktop emulation cannot establish Android installation eligibility, the operati
 - Six multi-trip browser workflows pass: migration of an existing populated tracker; adding/switching/reopening separate trips; all trips shared by one invite link; offline edits on different trips; all-trip backup export and legacy single-trip restore; and requested table alignment, removed arrows/helper band, and mobile page width.
 - The prior 15 browser regression checks still pass with dropdown-only week navigation and version 2 backups. Shared-group regression checks cover the existing conflict/offline flows.
 - Physical Android still needs its install/update, native selector, file picker, and cross-phone airplane-mode checks. Close all old Tripon windows and reopen to activate the updated service worker before checking Add Trip.
+
+## Delete Trip update
+
+- 27 unit/API tests pass. Added tests verify other trips remain byte-for-byte unchanged by deletion, last-trip deletion yields a valid empty workspace, concurrent changes to other trips survive, conflicts on the deleted trip require review, and stale offline edits cannot resurrect it.
+- Five deletion browser workflows cover cancellation; named group-wide confirmation; a second phone viewing the removed trip falling back to the survivor; exact survivor people/weeks/goals/entries; offline deletion surviving reload and later syncing; deleting the last trip; rejecting a stale offline edit; and adding a new shared trip from the empty state.
+- Delete Trip is available through the destination pencil/settings dialog. Existing backups can restore deleted records; deletion does not revoke the group invite link.

@@ -8,6 +8,8 @@ A clean group travel savings tracker. Initial destination: **Samal**. No account
 
 Use **Add Trip** to create a destination with its own savings goal, people, weeks and contributions. Choose a trip from the selector at the top. New trips start with four editable starter names and zero contributions; IDs and records are separate from every other trip. A group supports up to 50 trips.
 
+To delete the selected trip, open its **pencil → Delete Trip**. The named confirmation lists its people, weeks and contribution total. Confirming removes only that trip for everyone in the group; all other trips remain unchanged. Export a backup first if needed. After the last trip is deleted, the group stays connected with an empty state and **Add Trip** available. Offline deletion queues until reconnecting; a conflicting newer edit requires review. Old offline edits cannot recreate a deleted trip.
+
 All trips in a shared group use the **same invite link**. Adding trips and editing their records syncs to everyone, while each phone keeps its own selected trip, selected weeks and appearance. Switching trips never adds their totals together.
 
 Existing single-trip records migrate into the first trip without changing contributions, people or dates. Exports now include **all trips** in a version 2 backup. Restoring a version 2 backup replaces all trips after confirmation; importing an older version 1 backup replaces only the selected trip and keeps other trips. Invite credentials remain separate from backups.

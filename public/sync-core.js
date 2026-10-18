@@ -1,7 +1,7 @@
 import {workspaceFrom,LEGACY_TRIP} from './trips.js';
 import {validateData} from './core.js';
 export const equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
-export function shared(data){if(data.version===2){const w=workspaceFrom(data);w.theme='system';w.selectedTripId=w.trips[0].id;w.trips=w.trips.map(t=>({id:t.id,...shared(t)}));return w;}const d=structuredClone(data);d.theme='system';d.selectedWeekId=d.weeks[0].id;return validateData(d);}
+export function shared(data){if(data.version===2){const w=workspaceFrom(data);w.theme='system';w.selectedTripId=w.trips[0]?.id??null;w.trips=w.trips.map(t=>({id:t.id,...shared(t)}));return w;}const d=structuredClone(data);d.theme='system';d.selectedWeekId=d.weeks[0].id;return validateData(d);}
 function personSnapshot(d,id){const person=d.people.find(p=>p.id===id);if(!person)return null;const entries={};for(const w of d.weeks)if(w.entries[id])entries[w.id]=w.entries[id];return {person,entries};}
 function changesSingle(before,after){
   const ops=[];const push=(type,id,old,value,extra={})=>{if(!equal(old,value))ops.push({type,id,before:old,value,...extra});};
@@ -67,6 +67,6 @@ export function applyChanges(document,ops,force=false){
   }
   for(const [scope,edits] of scoped){const index=d.trips.findIndex(t=>t.id===scope);if(index<0)throw new Error('This trip was removed. Export your pending edits before discarding them.');try{d.trips[index]={id:scope,...applySingle(d.trips[index],edits,force)};}catch(error){if(error instanceof SyncConflict)conflicts.push(...error.conflicts.map(c=>({...c,scope})));else throw error;}}
   if(conflicts.length)throw new SyncConflict(conflicts);
-  if(!d.trips.some(t=>t.id===d.selectedTripId))d.selectedTripId=d.trips[0]?.id;
+  if(!d.trips.some(t=>t.id===d.selectedTripId))d.selectedTripId=d.trips[0]?.id??null;
   return shared(workspaceFrom(d));
 }

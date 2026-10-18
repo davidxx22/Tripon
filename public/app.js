@@ -1,17 +1,17 @@
-import {workspaceFrom,newWorkspace,currentTrip} from './trips.js';
+import {workspaceFrom,newWorkspace,currentTrip,removeTrip} from './trips.js';
 import {GroupSync,inviteFromHash} from './sync.js';
 import {STORAGE_KEY, amount, money, newTracker, blankWeek, addDays, dateLabel, localDate, personWeek, personTotal, weekTotal, tripTotal, progress, uid, deletePerson, deleteWeek, validateData} from './core.js';
 const $ = id => document.getElementById(id);
 const escape = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let sync, workspace;
 let data, unsaved = false, damaged = false, rawBackup = null, installPrompt = null, toastTimer;
-try { rawBackup = localStorage.getItem(STORAGE_KEY); if (rawBackup) {workspace=workspaceFrom(JSON.parse(rawBackup));data=currentTrip(workspace);} }
+try { rawBackup = localStorage.getItem(STORAGE_KEY); if (rawBackup) {workspace=workspaceFrom(JSON.parse(rawBackup));data=currentTrip(workspace)||newTracker();} }
 catch { damaged=true; }
-const firstVisit=!data;
+const firstVisit=!workspace;
 workspace ||= newWorkspace();
-data=currentTrip(workspace);
+data=currentTrip(workspace)||newTracker();
 function pack(){const id=workspace.selectedTripId;workspace.theme=data.theme;workspace.trips=workspace.trips.map(t=>t.id===id?{...data,id}:t);return workspace;}
-function useWorkspace(incoming,preserve=true){const old=workspace;pack();const next=workspaceFrom(incoming);if(preserve){next.theme=old.theme;if(next.trips.some(t=>t.id===old.selectedTripId))next.selectedTripId=old.selectedTripId;for(const t of next.trips){const previous=old.trips.find(p=>p.id===t.id);if(previous&&t.weeks.some(w=>w.id===previous.selectedWeekId))t.selectedWeekId=previous.selectedWeekId;}}workspace=next;data=currentTrip(workspace);data.theme=workspace.theme;}
+function useWorkspace(incoming,preserve=true){const old=workspace;pack();const next=workspaceFrom(incoming);if(preserve){next.theme=old.theme;if(next.trips.some(t=>t.id===old.selectedTripId))next.selectedTripId=old.selectedTripId;for(const t of next.trips){const previous=old.trips.find(p=>p.id===t.id);if(previous&&t.weeks.some(w=>w.id===previous.selectedWeekId))t.selectedWeekId=previous.selectedWeekId;}}workspace=next;data=currentTrip(workspace)||newTracker();data.theme=workspace.theme;}
 function applyTheme() { document.documentElement.dataset.theme=data.theme; $('theme').value=data.theme; const dark=data.theme==='dark'||data.theme==='system'&&matchMedia('(prefers-color-scheme:dark)').matches; document.querySelector('meta[name="theme-color"]').content=dark?'#080c0b':'#f7f9f7'; }
 function notify(message) { clearTimeout(toastTimer); $('toast').textContent=message; $('toast').hidden=false; toastTimer=setTimeout(()=>$('toast').hidden=true,4500); }
 function showStorageError(message) {
@@ -27,10 +27,12 @@ function save() {
 }
 function commit(message) { render(); const ok=save(); if(message)notify(ok?message:message+' Edits are not saved—export a backup.'); }
 function render() {
-  $('trip-select').innerHTML=workspace.trips.map(t=>`<option value="${escape(t.id)}" ${t.id===workspace.selectedTripId?'selected':''}>${escape(t.id===workspace.selectedTripId?data.destination:t.destination)}${(t.id===workspace.selectedTripId?data.demo:t.demo)?' · sample':''}</option>`).join('');
+  const hasTrips=workspace.trips.length>0;
+  $('trip-select').disabled=!hasTrips;$('edit-trip').hidden=!hasTrips;$('no-trips').hidden=hasTrips;for(const selector of ['.savings-panel','.tracker','.lower-grid'])document.querySelector(selector).hidden=!hasTrips;
+  $('trip-select').innerHTML=workspace.trips.map(t=>`<option value="${escape(t.id)}" ${t.id===workspace.selectedTripId?'selected':''}>${escape(t.id===workspace.selectedTripId?data.destination:t.destination)}${(t.id===workspace.selectedTripId?data.demo:t.demo)?' · sample':''}</option>`).join('')||'<option>No trips yet</option>';
   applyTheme(); const w=currentWeek(), i=data.weeks.findIndex(x=>x.id===w.id), p=progress(data);
-  $('trip-heading').textContent=data.destination;document.title=`Tripon · ${data.destination}`;
-  $('demo-banner').hidden=!data.demo;
+  $('trip-heading').textContent=hasTrips?data.destination:'No trips yet';document.querySelector('.intro-copy').textContent=hasTrips?'Group travel savings':'Add a trip to start recording contributions.';document.title=hasTrips?`Tripon · ${data.destination}`:'Tripon';
+  $('demo-banner').hidden=!hasTrips||!data.demo;
   $('recorded-label').textContent=data.demo?'SAMPLE CONTRIBUTIONS · DEMO ONLY':'RECORDED CONTRIBUTIONS';
   $('trip-total').textContent=money(p.total);
   $('savings-caption').textContent=data.demo?'A preview of how your tracker works. No actual savings recorded.':'Total across all weeks.';
@@ -79,7 +81,13 @@ function welcome(){
 function tripSettings(){formDialog('Trip settings','Set the destination and a target. Your target is separate from recorded contributions.',`<label class="field">Trip destination<input name="destination" value="${escape(data.destination)}" maxlength="80" required></label><label class="field">Savings goal (₱)<input name="goal" inputmode="decimal" value="${(data.goalCents/100).toFixed(2)}" required><small>Enter 0 to leave the goal unset. Up to two decimal places.</small></label>`,f=>{
   const destination=f.get('destination').trim();if(!destination)throw new Error('Enter a destination.');const goalCents=amount(f.get('goal'));
   data.destination=destination;data.goalCents=goalCents;close();commit('Trip settings saved.');
-});}
+},'<button type="button" class="text-button destructive" id="delete-trip">Delete Trip</button>');
+$('delete-trip').onclick=()=>{
+  const tripId=workspace.selectedTripId,trip=data;
+  confirmDialog(`Delete ${trip.destination}?`,`Permanently remove this trip’s savings goal, ${trip.people.length} people, ${trip.weeks.length} weeks, and ${money(tripTotal(trip))}${trip.demo?' in sample contributions':' in recorded contributions'}${sync?.state?' for everyone in this group':''}. Other trips and their records are kept. This cannot be undone without a backup. Export a backup before deleting if needed.`,()=>{
+    pack();removeTrip(workspace,tripId);data=currentTrip(workspace)||newTracker();data.theme=workspace.theme;close();commit('Trip deleted. Other trips are unchanged.');
+  },'Delete Trip');
+};}
 function editContribution(personId,day){const person=data.people.find(p=>p.id===personId),w=currentWeek();formDialog(`${person.name} · Day ${day+1}`,`${dateLabel(addDays(w.start,day),true)}${data.demo?' · Sample contribution':''}`,`<label class="field">Contribution (₱)<input name="value" inputmode="decimal" value="${((w.entries[personId]?.[day]||0)/100).toFixed(2)}" required><small>Zero or a positive amount, with up to two decimal places.</small></label>`,f=>{const value=amount(f.get('value'));w.entries[personId]||=Array(5).fill(0);w.entries[personId][day]=value;close();commit();notify(data.demo?'Sample contribution updated.':'Contribution recorded.');});}
 function personEditor(id){const person=data.people.find(p=>p.id===id);if(!person&&data.people.length>=200){notify('This tracker supports up to 200 people.');return;}
   formDialog(person?'Manage person':'Add to the crew','People appear in every week. Each week keeps its own contributions.',`<label class="field">Name<input name="name" value="${escape(person?.name||'')}" maxlength="60" required autocomplete="off"></label>`,f=>{const name=f.get('name').trim();if(!name)throw new Error('Enter a name.');if(person)person.name=name;else data.people.push({id:uid(),name});close();commit(person?'Name updated.':'Person added to all weeks.');},person?'<button type="button" class="text-button destructive" id="remove-person">Remove person</button>':'');
@@ -140,14 +148,14 @@ async function openInvite(credentials){
 $('join-group').onclick=()=>formDialog('Join a group','Paste the complete invite link from someone in your group. The link grants editing access.',`<label class="field">Group invite link<input name="invite" type="url" required placeholder="https://…/#group=…"></label>`,f=>{const url=new URL(f.get('invite'));if(url.origin!==location.origin)throw new Error('Use a group link from this Tripon site.');const match=url.hash.match(/^#group=([a-f0-9-]{36})\.([a-f0-9]{64})$/);if(!match)throw new Error('This is not a complete group invite link.');void openInvite({id:match[1],key:match[2]});});
 $('review-sync').onclick=()=>{
   const conflicts=sync.conflict?.conflicts||[];
-  openDialog('Review conflicting edits','Another phone changed the same records while you were editing. Your pending edits are still on this device. Export a backup if you want to keep a copy before choosing.',`<ul class="conflict-list">${conflicts.slice(0,10).map(c=>`<li>${escape(c.type==='entry'?`Day ${c.day+1}: group ${money(c.current||0)}, yours ${money(c.wanted||0)}`:c.type==='name'?'A person’s name changed.':c.type==='dates'?'A week’s dates changed.':c.type.includes('remove')?'Records you removed were changed by someone else.':'Trip or group records changed.')}</li>`).join('')||'<li>A person or week used by your pending edits was removed. Your edits cannot be applied automatically.</li>'}</ul><div class="form-actions"><button class="button" id="conflict-export">Export my copy</button><button class="button" id="use-group">Use group records</button><button class="button primary" id="keep-mine">Keep my edits</button></div>`,()=>{
+  openDialog('Review conflicting edits','Another phone changed the same records while you were editing. Your pending edits are still on this device. Export a backup if you want to keep a copy before choosing.',`<ul class="conflict-list">${conflicts.slice(0,10).map(c=>`<li>${escape(c.type==='entry'?`Day ${c.day+1}: group ${money(c.current||0)}, yours ${money(c.wanted||0)}`:c.type==='name'?'A person’s name changed.':c.type==='dates'?'A week’s dates changed.':c.type.includes('remove')?'Records you removed were changed by someone else.':'Trip or group records changed.')}</li>`).join('')||'<li>A trip, person or week used by your pending edits was removed. Your edits cannot be applied automatically.</li>'}</ul><div class="form-actions"><button class="button" id="conflict-export">Export my copy</button><button class="button" id="use-group">Use group records</button><button class="button primary" id="keep-mine">Keep my edits</button></div>`,()=>{
     $('conflict-export').onclick=exportBackup;
     $('use-group').onclick=()=>confirmDialog('Discard this device’s pending edits?','Your unsynced changes will be discarded and replaced with the current shared group records. Export them first if needed.',async()=>{try{await sync.resolve(false);close();}catch(error){notify(error.message);}},'Use group records',false);
-    $('keep-mine').onclick=()=>confirmDialog('Apply your pending edits?','Overwrite the conflicting shared fields with your edits. Edits to other fields are kept. Deletions will remove those records for everyone. If a person or week was removed, restore those records manually from a backup instead.',async()=>{close();sync.paused=false;await sync.resolve(true);},'Apply my edits',false);
+    $('keep-mine').onclick=()=>confirmDialog('Apply your pending edits?','Overwrite the conflicting shared fields with your edits. Edits to other fields are kept. Deletions will remove those records for everyone. If a trip, person or week was removed, restore those records manually from a backup instead.',async()=>{close();sync.paused=false;await sync.resolve(true);},'Apply my edits',false);
   });
 };
 
-$('trip-select').onchange=e=>{pack();workspace.selectedTripId=e.target.value;data=currentTrip(workspace);data.theme=workspace.theme;commit();};
+$('trip-select').onchange=e=>{pack();workspace.selectedTripId=e.target.value;data=currentTrip(workspace)||newTracker();data.theme=workspace.theme;commit();};
 $('add-trip').onclick=()=>{
   if(workspace.trips.length>=50){notify('This group supports up to 50 trips.');return;}
   formDialog('Add trip','This trip gets its own people, weeks, contributions and savings goal. Shared groups sync it to everyone.',`<label class="field">Trip destination<input name="destination" maxlength="80" required placeholder="e.g. Siargao"></label><label class="field">Savings goal (₱)<input name="goal" inputmode="decimal" value="0.00" required></label>`,f=>{
