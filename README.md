@@ -6,7 +6,7 @@ A clean group travel savings tracker. Initial destination: **Samal**. No account
 
 ## Navigation
 
-The bottom navigation separates **Home** (savings overview), **Transactions** (daily contribution table and weeks), **History** (dated contribution cards with search, date and payment-method filters), **People** (person totals with week/month filters), and **Settings** (profile, appearance, group sharing and backups). Only the content pane scrolls; the header and navigation occupy separate app rows sized to the visual viewport, and the chat button is anchored above the navigation. Settings hides the trip selector, Add Trip control, and destination heading; they remain available in other views. The old footer is removed. Installation help lives beside backups in Settings, and save failures still show a visible alert. There is no Google sign-in or account requirement.
+The bottom navigation separates **Home** (savings overview), **Transactions** (daily contribution table and weeks), **History** (dated contribution cards with search, date and payment-method filters), **People** (person totals with week/month filters), and **Settings** (profile, appearance, group sharing and backups). Only the content pane scrolls; the header and navigation occupy separate app rows sized to the visual viewport, and the chat button is anchored above the navigation. The trip selector and Add Trip control appear only on Home. Settings also hides the destination heading. The old footer is removed. Installation help lives beside backups in Settings, and save failures still show a visible alert. There is no Google sign-in or account requirement.
 
 ## Your local profile
 

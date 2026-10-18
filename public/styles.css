@@ -105,3 +105,4 @@ html[data-theme=dark] .gcash-summary .eyebrow,html[data-theme=dark] #gcash-total
 button.person-summary{width:100%;text-align:left;background:var(--panel);color:var(--text);font:inherit;cursor:pointer;min-height:72px;border:1px solid var(--border);border-radius:12px;margin-bottom:10px}
 button.person-summary:hover{border-color:var(--teal);background:var(--teal-soft)}.breakdown-chevron{font-size:24px;color:var(--muted);margin-left:4px}
 .payment-breakdown{display:grid;gap:10px;margin:20px 0}.payment-breakdown>p{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px;border:1px solid var(--border);border-radius:10px}.payment-breakdown>p:first-child{background:var(--teal-soft)}.payment-breakdown>small{color:var(--muted)}.gcash-breakdown strong{color:#1565c0}html[data-theme=dark] .gcash-breakdown strong{color:#83b9ff}
+body:not([data-page=home]) .trip-switcher{display:none}
