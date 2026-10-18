@@ -4,7 +4,7 @@ import {STORAGE_KEY, amount, money, newTracker, blankWeek, addDays, dateLabel, l
 const $ = id => document.getElementById(id);
 const escape = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let sync, workspace;
-let data, unsaved = false, damaged = false, rawBackup = null, installPrompt = null, toastTimer;
+let data, unsaved = false, damaged = false, rawBackup = null, toastTimer;
 try { rawBackup = localStorage.getItem(STORAGE_KEY); if (rawBackup) {workspace=workspaceFrom(JSON.parse(rawBackup));data=currentTrip(workspace)||newTracker();} }
 catch { damaged=true; }
 const firstVisit=!workspace;
@@ -102,6 +102,7 @@ async function importBackup(file){if(!file)return;try{if(file.size>5*1024*1024)t
 function installation(){const standalone=matchMedia('(display-mode: standalone)').matches||navigator.standalone;openDialog(standalone?'Tripon is installed':'Take Tripon with you',standalone?'You are already using Tripon as an installed app.':'Install from Chrome on Android for a home screen shortcut and a standalone app.',`<ol class="install-steps"><li>Open this app’s HTTPS link in <strong>Chrome</strong>.</li><li>Tap Chrome’s <strong>⋮ menu</strong>, then <strong>Add to home screen</strong> or <strong>Install app</strong>.</li><li>Confirm <strong>Install</strong>. Open Tripon from its new icon.</li></ol><p class="external-note">Wait for “Offline ready” below before going offline. Open the same group invite link on every phone to sync records. Offline edits sync when you reconnect. Keep an exported backup too.</p><p id="offline-detail" class="dialog-copy">${escape($('connection').textContent)}</p><div class="form-actions"><button id="install-close" class="button">Got it</button></div>`,()=>{$('install-close').onclick=close;});}
 $('edit-trip').onclick=tripSettings;
 $('theme').onchange=e=>{data.theme=e.target.checked?'dark':'light';applyTheme();save();};
+$('how-install').onclick=installation;
 $('add-person').onclick=()=>personEditor();$('add-week').onclick=()=>weekEditor(true);$('edit-week').onclick=()=>weekEditor(false);
 $('table-body').onclick=e=>{const entry=e.target.closest('[data-entry]'),person=e.target.closest('[data-person]');if(entry)editContribution(entry.dataset.entry,Number(entry.dataset.day));else if(person)personEditor(person.dataset.person);};
 function selectWeek(id){data.selectedWeekId=id;commit();}
@@ -109,8 +110,7 @@ $('week-select').onchange=e=>selectWeek(e.target.value);
 $('delete-week').onclick=()=>{if(data.weeks.length<=1)return;const w=currentWeek();confirmDialog('Delete this week?',`Permanently delete Week ${data.weeks.indexOf(w)+1} and its ${money(weekTotal(data,w))} ${data.demo?'sample ':''}contributions. All-time person totals and trip savings will decrease. ${sync?.state?'This deletes the week for everyone in the group. ':''}Other weeks are kept. Export a backup first if needed.`,()=>{deleteWeek(data,w.id);close();commit('Week and its contributions deleted.');},'Delete week');};
 $('exit-demo').onclick=()=>confirmDialog('Start your real tracker?','This clears the selected trip’s sample contributions and demo edits, and starts it empty with the four starter names. Other trips are kept. Export the demo if you want to keep it.',()=>{const theme=data.theme;data=newTracker();data.theme=theme;close();commit('Empty tracker ready. Real contributions start at zero.');},'Start empty',false);
 $('export').onclick=exportBackup;$('import').onclick=()=>$('import-file').click();$('import-file').onchange=e=>importBackup(e.target.files[0]);
-$('install').onclick=async()=>{if(!installPrompt){installation();return;}try{await installPrompt.prompt();const choice=await installPrompt.userChoice;installPrompt=null;$('install').textContent='Install app ↗';if(choice.outcome==='accepted')notify('Installation requested. Check your home screen.');}catch{installPrompt=null;installation();}};
-$('how-install').onclick=installation;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;$('install').textContent='Install app ↓';});window.addEventListener('appinstalled',()=>{installPrompt=null;$('install').textContent='App installed ✓';notify('Tripon installed. Ready for your next adventure.');});
+
 window.addEventListener('beforeunload',e=>{if(unsaved){e.preventDefault();e.returnValue='';}});
 window.addEventListener('storage',e=>{if(e.key!==STORAGE_KEY||sync?.state)return;if(unsaved){showStorageError('Another tab changed this tracker. Your unsaved edits remain here. Export them before reopening the app.');return;}try{if(e.newValue){useWorkspace(JSON.parse(e.newValue),false);close();render();notify('Tracker updated from another tab.');}}catch{notify('Another tab changed storage. Reopen to check your saved data.');}});
 let offlineReady=false;
