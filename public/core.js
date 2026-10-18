@@ -1,6 +1,17 @@
 export const STORAGE_KEY = 'tripon.v1';
 export const THEMES = ['system', 'light', 'dark'];
 export const MAX_CENTS = 999999999;
+export const PAYMENT_METHODS=['unspecified','cash','gcash','cash+gcash','cash+unspecified','gcash+unspecified','cash+gcash+unspecified'];
+export function paymentMethod(week,person,day){return week.paymentMethods?.[person]?.[day]||'unspecified';}
+export function paymentLabel(method){return method==='unspecified'?'Not specified':method.split('+').map(x=>x==='gcash'?'GCash':x==='cash'?'Cash':'Not specified').join(' + ');}
+export function mergePaymentMethods(before,after){const all=new Set([...before.split('+'),...after.split('+')]);return ['cash','gcash','unspecified'].filter(x=>all.has(x)).join('+');}
+export function setPaymentMethod(week,person,day,method){
+  if(!PAYMENT_METHODS.includes(method))throw new Error('Choose Cash, GCash, or Not specified.');
+  if(method==='unspecified'&&!week.paymentMethods?.[person])return;
+  week.paymentMethods||={};week.paymentMethods[person]||=Array(5).fill('unspecified');week.paymentMethods[person][day]=method;
+  if(week.paymentMethods[person].every(x=>x==='unspecified'))delete week.paymentMethods[person];
+  if(!Object.keys(week.paymentMethods).length)delete week.paymentMethods;
+}
 export function money(cents) { return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(cents / 100); }
 export function amount(text) {
   const s = String(text).trim();
@@ -27,7 +38,7 @@ export function personTotal(data,id) { return data.weeks.reduce((sum,w)=>sum+per
 export function weekTotal(data,week) { return data.people.reduce((sum,p)=>sum+personWeek(week,p.id),0); }
 export function tripTotal(data) { return data.weeks.reduce((sum,w)=>sum+weekTotal(data,w),0); }
 export function progress(data) { const total=tripTotal(data); return {total, remaining:Math.max(0,data.goalCents-total), percent:data.goalCents ? Math.min(100,total/data.goalCents*100) : 0}; }
-export function deletePerson(data,id) { data.people=data.people.filter(p=>p.id!==id); for(const w of data.weeks) delete w.entries[id]; }
+export function deletePerson(data,id) { data.people=data.people.filter(p=>p.id!==id); for(const w of data.weeks){delete w.entries[id];if(w.paymentMethods){delete w.paymentMethods[id];if(!Object.keys(w.paymentMethods).length)delete w.paymentMethods;}} }
 export function deleteWeek(data,id) { if(data.weeks.length<=1) throw new Error('Keep at least one week.'); data.weeks=data.weeks.filter(w=>w.id!==id); if(data.selectedWeekId===id)data.selectedWeekId=data.weeks[0].id; }
 export function validateData(raw) {
   const fail = message => {throw new Error('Invalid backup: '+message);};
@@ -46,7 +57,15 @@ export function validateData(raw) {
     if(!obj(w)||!id(w.id)||weekIds.has(w.id)||!validDate(w.start)||!validDate(w.end)||w.end!==addDays(w.start,4)||!obj(w.entries))fail('weeks need unique IDs and five consecutive dates.');
     weekIds.add(w.id); const entries={};
     for(const [key,values] of Object.entries(w.entries)){if(!ids.has(key)||!Array.isArray(values)||values.length!==5||!values.every(cents))fail('invalid contribution or unknown person.');entries[key]=[...values];}
-    return {id:w.id,start:w.start,end:w.end,entries};
+    const paymentMethods={};
+    if(w.paymentMethods!==undefined){
+      if(!obj(w.paymentMethods))fail('invalid payment methods.');
+      for(const [key,values] of Object.entries(w.paymentMethods)){
+        if(!ids.has(key)||!entries[key]||!Array.isArray(values)||values.length!==5||!values.every(v=>PAYMENT_METHODS.includes(v)))fail('invalid payment method or unknown contribution.');
+        if(values.some(v=>v!=='unspecified'))paymentMethods[key]=[...values];
+      }
+    }
+    return {id:w.id,start:w.start,end:w.end,entries,...(Object.keys(paymentMethods).length?{paymentMethods}:{})};
   });
   if(!weekIds.has(raw.selectedWeekId))fail('selected week does not exist.');
   return {version:1,destination:raw.destination.trim(),goalCents:raw.goalCents,theme:raw.theme,demo:raw.demo,people,weeks,selectedWeekId:raw.selectedWeekId};

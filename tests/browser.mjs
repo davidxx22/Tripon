@@ -11,7 +11,7 @@ const results=[];
 async function check(name,fn){await fn();results.push(name);console.log('PASS',name);}
 const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,colorScheme:'dark',acceptDownloads:true});
 let page=await context.newPage();const errors=[];page.on('pageerror',error=>errors.push(error.message));
-const click=async id=>{const view=['export','import'].includes(id)?'settings':['add-person','add-week','edit-week','delete-week'].includes(id)?'transactions':null;if(view)await page.locator('.bottom-nav [data-nav='+view+']').click();await page.locator('#'+id).click();};
+const click=async id=>{const view=['export','import','how-install'].includes(id)?'settings':['add-person','add-week','edit-week','delete-week'].includes(id)?'transactions':null;if(view)await page.locator('.bottom-nav [data-nav='+view+']').click();await page.locator('#'+id).click();};
 const total=()=>page.locator('#trip-total').textContent();
 async function contribution(index,value){await page.locator('.bottom-nav [data-nav=transactions]').click();await page.locator('[data-entry]').nth(index).click();await page.locator('input[name=value]').fill(value);await page.getByRole('button',{name:'Save changes',exact:true}).click();}
 await check('first run offers empty tracker and explicitly labeled demo',async()=>{await page.goto(base);await page.locator('#start-empty').waitFor();assert.match(await page.locator('#modal').textContent(),/Explore demo · ₱10 per day/);await click('start-empty');assert.equal(await total(),'₱0.00');assert.equal(await page.locator('#theme').isChecked(),false);});

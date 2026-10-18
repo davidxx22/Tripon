@@ -6,7 +6,7 @@ A clean group travel savings tracker. Initial destination: **Samal**. No account
 
 ## Navigation
 
-The bottom navigation separates **Home** (savings overview), **Transactions** (daily contribution table and weeks), **People** (person totals with week/month filters), and **Settings** (profile, appearance, group sharing and backups). The chat button is anchored to the same viewport dock above the navigation, with safe-area spacing for phones. There is no Google sign-in or account requirement.
+The bottom navigation separates **Home** (savings overview), **Transactions** (daily contribution table and weeks), **People** (person totals with week/month filters), and **Settings** (profile, appearance, group sharing and backups). Only the content pane scrolls; the header and navigation occupy separate app rows sized to the visual viewport, and the chat button is anchored above the navigation. Settings hides the trip selector, Add Trip control, and destination heading; they remain available in other views. The old footer is removed. Installation help lives beside backups in Settings, and save failures still show a visible alert. There is no Google sign-in or account requirement.
 
 ## Your local profile
 
@@ -52,7 +52,17 @@ All trips in a shared group use the **same invite link**. Adding trips and editi
 
 Existing single-trip records migrate into the first trip without changing contributions, people or dates. Exports now include **all trips** in a version 2 backup. Restoring a version 2 backup replaces all trips after confirmation; importing an older version 1 backup replaces only the selected trip and keeps other trips. Invite credentials remain separate from backups.
 
-The week selector now sits flush with the left edge of the table. Navigation arrows and the helper band below the table are removed; saving feedback is in the footer.
+The week selector sits flush with the left edge of the table. Navigation arrows and the helper band below the table are removed; save errors appear in the alert above the tracker and updates are announced through the app's status/toast feedback.
+
+## Cash and GCash labels
+
+When editing a daily amount, choose **Not specified**, **Cash**, or **GCash**. Recorded entries display a small method label below the amount. Older contributions stay **Not specified**; no payment method is guessed. Labels do not alter savings totals, process money, or verify a transfer.
+
+Assistant examples: `Azel gave 50 this week via GCash`, `David gave 25 this week in cash`, or `David and Kian gave 50 today, split equally this week using GCash`. The preview includes a payment-method selector and shows the resulting labels. Commands with no method preserve existing labels. Adding a positive amount through another method combines labels (for example **Cash + GCash** or **GCash + Not specified**); replacing an amount uses the selected method. Combined labels do not quantify each method's share of the total.
+
+Optional `paymentMethods` arrays alongside each week's existing numeric `entries` keep legacy backups compatible. New backups, import validation, shared-group creation, offline queues, and sync preserve the labels. An amount and its label sync together in one contribution operation, so conflicting edits require review instead of silently mismatching money and method. Legacy numeric edit operations remain accepted. Deleting a person/week removes the associated labels too. The hosted sync API must be updated before publishing a client that sends labeled contributions; no database-table migration is needed.
+
+Run `npm run test:payments` for manual/assistant labels, combined labels, backup restoration, offline method-only changes, shared conflicts, and stationary navigation while the content pane actually scrolls.
 
 ## Sync across phones
 
