@@ -4,6 +4,16 @@ A clean group travel savings tracker. Initial destination: **Samal**. No account
 
 **Live app:** https://tripon-travel-savings.stonykiwi.chatgpt.site
 
+## Multiple trips
+
+Use **Add Trip** to create a destination with its own savings goal, people, weeks and contributions. Choose a trip from the selector at the top. New trips start with four editable starter names and zero contributions; IDs and records are separate from every other trip. A group supports up to 50 trips.
+
+All trips in a shared group use the **same invite link**. Adding trips and editing their records syncs to everyone, while each phone keeps its own selected trip, selected weeks and appearance. Switching trips never adds their totals together.
+
+Existing single-trip records migrate into the first trip without changing contributions, people or dates. Exports now include **all trips** in a version 2 backup. Restoring a version 2 backup replaces all trips after confirmation; importing an older version 1 backup replaces only the selected trip and keeps other trips. Invite credentials remain separate from backups.
+
+The week selector now sits flush with the left edge of the table. Navigation arrows and the helper band below the table are removed; saving feedback is in the footer.
+
 ## Sync across phones
 
 1. On the phone containing the tracker to share, choose **Share group → Create shared group**. This uploads the current destination, goal, people, weeks and contributions. A copy of the previous personal tracker is retained on that device.
@@ -12,7 +22,7 @@ A clean group travel savings tracker. Initial destination: **Samal**. No account
 
 **Anyone with a group link can view and edit its records.** Keep it private. There are no separate owner/viewer accounts. Opening the public homepage alone does not join a group. Existing local records are not uploaded automatically.
 
-Updates are checked about every five seconds while visible and on reconnecting. The group bar shows sync/pending/error/conflict states. Theme and selected week remain personal to each phone.
+Updates are checked about every five seconds while visible and on reconnecting. The group bar shows sync/pending/error/conflict states. Theme, selected trip and each trip’s selected week remain personal to each phone.
 
 Offline edits persist in a local queue, including after closing/reopening. Different cells merge automatically. If two phones edit the same record, **Review edits** offers export, use group records, or explicitly apply your local changes. Removed people/weeks are not silently resurrected by old edits. Reopen the app online to send/receive updates; a closed app does not continuously sync.
 
@@ -58,7 +68,7 @@ Publish through the Sites source/version/deployment workflow with its public aud
 
 The database stores only a SHA-256 hash of each 256-bit invite key. Clients send keys in an authorization header. Invite links keep keys in URL fragments, outside HTTP request URLs. The API exposes no group list. Reads/writes require the group key; API responses are never cached. Revision-checked updates and bounded batch receipts make retries idempotent. Shared-link access provides group editing, not identity verification or per-person permissions.
 
-The service worker caches only the app shell, never `/api/`. Increment its cache version when changing shell files. New workers wait until all older Tripon windows close. **Close all Tripon tabs/windows and reopen after this update** to activate sharing and the simplified design. Existing local `tripon.v1` records survive the update.
+The service worker caches only the app shell, never `/api/`. Increment its cache version when changing shell files. New workers wait until all older Tripon windows close. **Close all Tripon tabs/windows and reopen after this update** to activate sharing and the simplified design. Existing local `tripon.v1` records survive the update and migrate to a version 2 multi-trip document.
 
 ## Install on Android
 
@@ -80,7 +90,7 @@ Browser tests accept `TRIPON_TEST_URL`, `TRIPON_CHROME`, and `TRIPON_NODE_MODULE
 
 ## Files
 
-- `public/`: UI, calculation/schema logic, sync client, manifest, worker, logos/icons.
+- `public/`: UI, calculation/schema logic, multi-trip migration, sync client, manifest, worker, logos/icons.
 - `worker/api.js`: group creation, authorized reads, durable conflict-aware updates.
 - `drizzle/`: database schema migration and journal.
 - `scripts/`: build, local API/SQLite server, asset generation and checks.

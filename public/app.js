@@ -1,13 +1,17 @@
+import {workspaceFrom,newWorkspace,currentTrip} from './trips.js';
 import {GroupSync,inviteFromHash} from './sync.js';
 import {STORAGE_KEY, amount, money, newTracker, blankWeek, addDays, dateLabel, localDate, personWeek, personTotal, weekTotal, tripTotal, progress, uid, deletePerson, deleteWeek, validateData} from './core.js';
 const $ = id => document.getElementById(id);
 const escape = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let sync;
+let sync, workspace;
 let data, unsaved = false, damaged = false, rawBackup = null, installPrompt = null, toastTimer;
-try { rawBackup = localStorage.getItem(STORAGE_KEY); if (rawBackup) data=validateData(JSON.parse(rawBackup)); }
+try { rawBackup = localStorage.getItem(STORAGE_KEY); if (rawBackup) {workspace=workspaceFrom(JSON.parse(rawBackup));data=currentTrip(workspace);} }
 catch { damaged=true; }
 const firstVisit=!data;
-data ||= newTracker();
+workspace ||= newWorkspace();
+data=currentTrip(workspace);
+function pack(){const id=workspace.selectedTripId;workspace.theme=data.theme;workspace.trips=workspace.trips.map(t=>t.id===id?{...data,id}:t);return workspace;}
+function useWorkspace(incoming,preserve=true){const old=workspace;pack();const next=workspaceFrom(incoming);if(preserve){next.theme=old.theme;if(next.trips.some(t=>t.id===old.selectedTripId))next.selectedTripId=old.selectedTripId;for(const t of next.trips){const previous=old.trips.find(p=>p.id===t.id);if(previous&&t.weeks.some(w=>w.id===previous.selectedWeekId))t.selectedWeekId=previous.selectedWeekId;}}workspace=next;data=currentTrip(workspace);data.theme=workspace.theme;}
 function applyTheme() { document.documentElement.dataset.theme=data.theme; $('theme').value=data.theme; const dark=data.theme==='dark'||data.theme==='system'&&matchMedia('(prefers-color-scheme:dark)').matches; document.querySelector('meta[name="theme-color"]').content=dark?'#080c0b':'#f7f9f7'; }
 function notify(message) { clearTimeout(toastTimer); $('toast').textContent=message; $('toast').hidden=false; toastTimer=setTimeout(()=>$('toast').hidden=true,4500); }
 function showStorageError(message) {
@@ -18,11 +22,12 @@ function showStorageError(message) {
 }
 function save() {
   if(damaged){unsaved=true;showStorageError('Existing data could not be read. It has not been overwritten. Download it for recovery, or restore a valid backup below.');return false;}
-  try { localStorage.setItem(STORAGE_KEY,JSON.stringify(data)); sync?.capture(data); unsaved=false; $('storage-alert').hidden=true; $('save-status').textContent='✓ Saved on this device'; return true; }
+  try { localStorage.setItem(STORAGE_KEY,JSON.stringify(pack())); sync?.capture(workspace); unsaved=false; $('storage-alert').hidden=true; $('save-status').textContent='✓ Saved on this device'; return true; }
   catch { unsaved=true; $('save-status').textContent='Not saved — export a backup'; showStorageError('Saving failed. Your edits are only in memory. Export a backup now and check browser storage before closing.'); return false; }
 }
 function commit(message) { render(); const ok=save(); if(message)notify(ok?message:message+' Edits are not saved—export a backup.'); }
 function render() {
+  $('trip-select').innerHTML=workspace.trips.map(t=>`<option value="${escape(t.id)}" ${t.id===workspace.selectedTripId?'selected':''}>${escape(t.id===workspace.selectedTripId?data.destination:t.destination)}${(t.id===workspace.selectedTripId?data.demo:t.demo)?' · sample':''}</option>`).join('');
   applyTheme(); const w=currentWeek(), i=data.weeks.findIndex(x=>x.id===w.id), p=progress(data);
   $('trip-heading').textContent=data.destination;document.title=`Tripon · ${data.destination}`;
   $('demo-banner').hidden=!data.demo;
@@ -34,7 +39,7 @@ function render() {
   $('progress-copy').textContent=data.demo?'Sample progress only':data.goalCents?'Savings progress':'Set a target to track your progress';
   $('progress-percent').textContent=data.goalCents?`${p.percent.toFixed(1)}%`:'—';$('goal-progress').value=p.percent;
   $('week-select').innerHTML=data.weeks.map((x,n)=>`<option value="${escape(x.id)}" ${x.id===w.id?'selected':''}>Week ${n+1} · ${dateLabel(x.start)} – ${dateLabel(x.end,true)}</option>`).join('');
-  $('prev-week').disabled=i===0;$('next-week').disabled=i===data.weeks.length-1;$('delete-week').disabled=data.weeks.length===1;
+$('delete-week').disabled=data.weeks.length===1;
   $('delete-week').title=data.weeks.length===1?'Keep at least one week':'Delete selected week';
   $('table-caption').textContent=`${data.demo?'Sample ':''}Week ${i+1}, ${dateLabel(w.start,true)} to ${dateLabel(w.end,true)} daily contributions in Philippine pesos`;
   $('table-head').innerHTML=`<tr><th scope="col">Name</th>${Array.from({length:5},(_,n)=>`<th scope="col">Day ${n+1}<span>${dateLabel(addDays(w.start,n))}</span></th>`).join('')}<th scope="col">Weekly total</th></tr>`;
@@ -85,8 +90,8 @@ function weekEditor(isNew){if(isNew&&data.weeks.length>=1000){notify('This track
   $('week-start').oninput=()=>{try{$('week-end').value=addDays($('week-start').value,4);}catch{$('week-end').value='';}};
 }
 function download(text,filename){const url=URL.createObjectURL(new Blob([text],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
-function exportBackup(){download(JSON.stringify(data,null,2),`tripon-${data.demo?'DEMO-':''}${localDate()}.json`);notify('Backup exported. Keep the JSON file somewhere safe.');}
-async function importBackup(file){if(!file)return;try{if(file.size>5*1024*1024)throw new Error('Backup is too large (maximum 5 MB).');const candidate=validateData(JSON.parse(await file.text()));confirmDialog('Restore this backup?',`Replace ${sync?.state?'the shared group’s records for everyone':'this device’s tracker'} with ${candidate.destination}: ${candidate.people.length} people, ${candidate.weeks.length} weeks, and ${money(tripTotal(candidate))}${candidate.demo?' in SAMPLE contributions':''}. This also replaces the goal and appearance. Export your current data first if needed.`,()=>{data=candidate;damaged=false;close();commit('Backup restored.');},'Replace and restore',false);}catch(err){openDialog('Backup not restored',err instanceof SyntaxError?'This file is not valid JSON. Select an unmodified Tripon JSON backup.':err.message,'<div class="form-actions"><button id="dismiss-import" class="button">Close</button></div>',()=>{$('dismiss-import').onclick=close;});}finally{$('import-file').value='';}}
+function exportBackup(){download(JSON.stringify(pack(),null,2),`tripon-all-trips-${data.demo?'DEMO-':''}${localDate()}.json`);notify('Backup exported. Keep the JSON file somewhere safe.');}
+async function importBackup(file){if(!file)return;try{if(file.size>5*1024*1024)throw new Error('Backup is too large (maximum 5 MB).');const raw=JSON.parse(await file.text()),multiple=raw.version===2,candidate=multiple?workspaceFrom(raw):validateData(raw);confirmDialog('Restore this backup?',`Replace ${multiple?'all trips':'the selected trip'} ${sync?.state?'in the shared group’s records for everyone':'on this device'} with ${multiple?candidate.trips.length+' trips':candidate.destination+' · '+candidate.people.length+' people · '+money(tripTotal(candidate))}. Other trips are ${multiple?'replaced too':'kept'}. Appearance is restored on this device. Export a backup first if needed.`,()=>{if(multiple)useWorkspace(candidate,false);else{data=candidate;pack();}damaged=false;close();commit('Backup restored.');},'Replace and restore',false);}catch(err){openDialog('Backup not restored',err instanceof SyntaxError?'This file is not valid JSON. Select an unmodified Tripon JSON backup.':err.message,'<div class="form-actions"><button id="dismiss-import" class="button">Close</button></div>',()=>{$('dismiss-import').onclick=close;});}finally{$('import-file').value='';}}
 function installation(){const standalone=matchMedia('(display-mode: standalone)').matches||navigator.standalone;openDialog(standalone?'Tripon is installed':'Take Tripon with you',standalone?'You are already using Tripon as an installed app.':'Install from Chrome on Android for a home screen shortcut and a standalone app.',`<ol class="install-steps"><li>Open this app’s HTTPS link in <strong>Chrome</strong>.</li><li>Tap Chrome’s <strong>⋮ menu</strong>, then <strong>Add to home screen</strong> or <strong>Install app</strong>.</li><li>Confirm <strong>Install</strong>. Open Tripon from its new icon.</li></ol><p class="external-note">Wait for “Offline ready” below before going offline. Open the same group invite link on every phone to sync records. Offline edits sync when you reconnect. Keep an exported backup too.</p><p id="offline-detail" class="dialog-copy">${escape($('connection').textContent)}</p><div class="form-actions"><button id="install-close" class="button">Got it</button></div>`,()=>{$('install-close').onclick=close;});}
 $('edit-trip').onclick=tripSettings;$('goal-button').onclick=tripSettings;
 $('theme').onchange=e=>{data.theme=e.target.value;applyTheme();save();};matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme);
@@ -94,18 +99,17 @@ $('add-person').onclick=()=>personEditor();$('add-week').onclick=()=>weekEditor(
 $('table-body').onclick=e=>{const entry=e.target.closest('[data-entry]'),person=e.target.closest('[data-person]');if(entry)editContribution(entry.dataset.entry,Number(entry.dataset.day));else if(person)personEditor(person.dataset.person);};
 function selectWeek(id){data.selectedWeekId=id;commit();}
 $('week-select').onchange=e=>selectWeek(e.target.value);
-for(const [id,delta] of [['prev-week',-1],['next-week',1]])$(id).onclick=()=>{const index=data.weeks.findIndex(w=>w.id===data.selectedWeekId);const next=data.weeks[index+delta];if(next)selectWeek(next.id);};
 $('delete-week').onclick=()=>{if(data.weeks.length<=1)return;const w=currentWeek();confirmDialog('Delete this week?',`Permanently delete Week ${data.weeks.indexOf(w)+1} and its ${money(weekTotal(data,w))} ${data.demo?'sample ':''}contributions. All-time person totals and trip savings will decrease. ${sync?.state?'This deletes the week for everyone in the group. ':''}Other weeks are kept. Export a backup first if needed.`,()=>{deleteWeek(data,w.id);close();commit('Week and its contributions deleted.');},'Delete week');};
-$('exit-demo').onclick=()=>confirmDialog('Start your real tracker?','This clears all sample contributions and demo edits, and starts an empty tracker with the four starter names. Export the demo if you want to keep it.',()=>{const theme=data.theme;data=newTracker();data.theme=theme;close();commit('Empty tracker ready. Real contributions start at zero.');},'Start empty',false);
+$('exit-demo').onclick=()=>confirmDialog('Start your real tracker?','This clears the selected trip’s sample contributions and demo edits, and starts it empty with the four starter names. Other trips are kept. Export the demo if you want to keep it.',()=>{const theme=data.theme;data=newTracker();data.theme=theme;close();commit('Empty tracker ready. Real contributions start at zero.');},'Start empty',false);
 $('export').onclick=exportBackup;$('import').onclick=()=>$('import-file').click();$('import-file').onchange=e=>importBackup(e.target.files[0]);
 $('install').onclick=async()=>{if(!installPrompt){installation();return;}try{await installPrompt.prompt();const choice=await installPrompt.userChoice;installPrompt=null;$('install').textContent='Install app ↗';if(choice.outcome==='accepted')notify('Installation requested. Check your home screen.');}catch{installPrompt=null;installation();}};
 $('how-install').onclick=installation;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;$('install').textContent='Install app ↓';});window.addEventListener('appinstalled',()=>{installPrompt=null;$('install').textContent='App installed ✓';notify('Tripon installed. Ready for your next adventure.');});
 window.addEventListener('beforeunload',e=>{if(unsaved){e.preventDefault();e.returnValue='';}});
-window.addEventListener('storage',e=>{if(e.key!==STORAGE_KEY||sync?.state)return;if(unsaved){showStorageError('Another tab changed this tracker. Your unsaved edits remain here. Export them before reopening the app.');return;}try{if(e.newValue){data=validateData(JSON.parse(e.newValue));close();render();notify('Tracker updated from another tab.');}}catch{notify('Another tab changed storage. Reopen to check your saved data.');}});
+window.addEventListener('storage',e=>{if(e.key!==STORAGE_KEY||sync?.state)return;if(unsaved){showStorageError('Another tab changed this tracker. Your unsaved edits remain here. Export them before reopening the app.');return;}try{if(e.newValue){useWorkspace(JSON.parse(e.newValue),false);close();render();notify('Tracker updated from another tab.');}}catch{notify('Another tab changed storage. Reopen to check your saved data.');}});
 let offlineReady=false;
 function connection(){ const message=!navigator.onLine?(offlineReady?'Offline · edits stay saved':'Offline · on this device'):offlineReady?'Offline ready':'Preparing offline…'; $('connection').textContent=message;$('offline-footer').textContent=message;if($('offline-detail'))$('offline-detail').textContent=message; }
 window.addEventListener('online',connection);window.addEventListener('offline',connection);
-sync=new GroupSync({getData:()=>data,onData:incoming=>{const theme=data.theme,selected=data.selectedWeekId;data=validateData(incoming);data.theme=theme;if(data.weeks.some(w=>w.id===selected))data.selectedWeekId=selected;render();save();},onStatus:state=>{
+sync=new GroupSync({getData:()=>pack(),onData:incoming=>{useWorkspace(incoming);render();save();},onStatus:state=>{
   $('group-title').textContent=state.joined?'Shared group':'Only this device';$('sync-status').textContent=state.joined?state.text:'Create a group to sync across phones.';$('share-group').textContent=state.joined?'Invite link':'Share group';$('join-group').hidden=state.joined;$('review-sync').hidden=!state.conflict;
   $('storage-copy').textContent=state.joined?'This tracker is shared with everyone who has the invite link. Offline edits are queued on this device until they sync. Export backups regularly.':'Records are saved on this device. Create or join a shared group to sync across phones.';
 }});
@@ -120,17 +124,17 @@ function shareDialog(){
   const link=sync.link();
   openDialog('Group invite link','Anyone with this link can view and edit this group. Share it only with your travel group. No account is needed.',`<label class="field">Invite link<input class="invite-field" id="invite-link" readonly value="${escape(link)}"></label><div class="form-actions"><button class="button destructive" id="leave-group">Leave on this device</button><button class="button primary" id="copy-invite">Copy link</button></div><p class="group-note">Other phones must open this exact invite link once. The public homepage alone does not join your group.</p>`,()=>{
     $('copy-invite').onclick=async()=>{try{await navigator.clipboard.writeText(link);notify('Invite link copied.');}catch{$('invite-link').focus();$('invite-link').select();notify('Select and copy the invite link.');}};
-    $('leave-group').onclick=()=>confirmDialog('Leave this group on this device?',`The shared group remains available to everyone else. This phone will return to its previous personal tracker.${sync.state.queue.length?' You have unsynced edits. Leaving discards them on this device. Export a backup before continuing.':' Export a backup first if needed.'}`,()=>{try{const personal=sync.leave(true);data=personal?validateData(personal):newTracker();close();commit('Returned to this device’s tracker.');}catch(error){notify(error.message);}},'Leave group',false);
+    $('leave-group').onclick=()=>confirmDialog('Leave this group on this device?',`The shared group remains available to everyone else. This phone will return to its previous personal tracker.${sync.state.queue.length?' You have unsynced edits. Leaving discards them on this device. Export a backup before continuing.':' Export a backup first if needed.'}`,()=>{try{const personal=sync.leave(true);useWorkspace(personal||newWorkspace(),false);close();commit('Returned to this device’s tracker.');}catch(error){notify(error.message);}},'Leave group',false);
   });
 }
 $('share-group').onclick=()=>{
   if(sync.state){shareDialog();return;}
-  confirmDialog('Share this tracker?','Upload this tracker’s destination, goal, people and contributions to a shared group. Anyone with its private invite link can edit it. A copy of this device’s previous tracker is kept locally.',async()=>{const button=$('do-confirm');button.disabled=true;button.textContent='Creating…';try{await sync.create();shareDialog();}catch(error){button.disabled=false;button.textContent='Create shared group';notify(error.message);}},'Create shared group',false);
+  confirmDialog('Share this tracker?','Upload all trips, with their goals, people, weeks and contributions, to a shared group. Anyone with its private invite link can edit it. A copy of this device’s previous tracker is kept locally.',async()=>{const button=$('do-confirm');button.disabled=true;button.textContent='Creating…';try{await sync.create();shareDialog();}catch(error){button.disabled=false;button.textContent='Create shared group';notify(error.message);}},'Create shared group',false);
 };
 async function openInvite(credentials){
   try{const result=await sync.fetchInvite(credentials);if(sync.state?.id===credentials.id&&sync.state?.key===credentials.key){history.replaceState(null,'',location.pathname);notify('This device already belongs to the group.');return;}
     if(sync.state?.queue.length){notify('Sync or export pending edits before joining a different group.');return;}
-    confirmDialog('Join this group?',`Open the shared ${result.data.destination} tracker with ${result.data.people.length} people and ${money(tripTotal(result.data))}${result.data.demo?' in sample contributions':''}. Your current tracker is kept as a local personal copy. Everyone with this link can edit the shared records.`,()=>{try{sync.join(credentials,result);close();notify('Joined the group. Changes will sync across phones.');}catch(error){notify('Could not save group connection: '+error.message);}},'Join group',false);
+    confirmDialog('Join this group?',`Open the shared group with ${workspaceFrom(result.data).trips.length} ${workspaceFrom(result.data).trips.length===1?'trip':'trips'}. Your current tracker is kept as a local personal copy. Everyone with this link can edit all trips in the group.`,()=>{try{sync.join(credentials,result);close();notify('Joined the group. Changes will sync across phones.');}catch(error){notify('Could not save group connection: '+error.message);}},'Join group',false);
   }catch(error){openDialog('Could not join group',navigator.onLine?error.message:'Connect to the internet to join a group for the first time.','<div class="form-actions"><button class="button" id="join-error-close">Close</button></div>',()=>{$('join-error-close').onclick=close;});}
 }
 $('join-group').onclick=()=>formDialog('Join a group','Paste the complete invite link from someone in your group. The link grants editing access.',`<label class="field">Group invite link<input name="invite" type="url" required placeholder="https://…/#group=…"></label>`,f=>{const url=new URL(f.get('invite'));if(url.origin!==location.origin)throw new Error('Use a group link from this Tripon site.');const match=url.hash.match(/^#group=([a-f0-9-]{36})\.([a-f0-9]{64})$/);if(!match)throw new Error('This is not a complete group invite link.');void openInvite({id:match[1],key:match[2]});});
@@ -140,5 +144,14 @@ $('review-sync').onclick=()=>{
     $('conflict-export').onclick=exportBackup;
     $('use-group').onclick=()=>confirmDialog('Discard this device’s pending edits?','Your unsynced changes will be discarded and replaced with the current shared group records. Export them first if needed.',async()=>{try{await sync.resolve(false);close();}catch(error){notify(error.message);}},'Use group records',false);
     $('keep-mine').onclick=()=>confirmDialog('Apply your pending edits?','Overwrite the conflicting shared fields with your edits. Edits to other fields are kept. Deletions will remove those records for everyone. If a person or week was removed, restore those records manually from a backup instead.',async()=>{close();sync.paused=false;await sync.resolve(true);},'Apply my edits',false);
+  });
+};
+
+$('trip-select').onchange=e=>{pack();workspace.selectedTripId=e.target.value;data=currentTrip(workspace);data.theme=workspace.theme;commit();};
+$('add-trip').onclick=()=>{
+  if(workspace.trips.length>=50){notify('This group supports up to 50 trips.');return;}
+  formDialog('Add trip','This trip gets its own people, weeks, contributions and savings goal. Shared groups sync it to everyone.',`<label class="field">Trip destination<input name="destination" maxlength="80" required placeholder="e.g. Siargao"></label><label class="field">Savings goal (₱)<input name="goal" inputmode="decimal" value="0.00" required></label>`,f=>{
+    const destination=f.get('destination').trim();if(!destination)throw new Error('Enter a destination.');const goalCents=amount(f.get('goal'));
+    pack();const trip={id:uid(),...newTracker()};trip.destination=destination;trip.goalCents=goalCents;trip.theme=workspace.theme;workspace.trips.push(trip);workspace.selectedTripId=trip.id;data=trip;close();commit('Trip added.');
   });
 };

@@ -26,3 +26,10 @@ Browser test screenshots and a machine-readable result are written to ignored `w
 8. Create a group on the phone with your records, then open its complete invite link on another phone. Join and edit different days on both phones. Verify matching totals and test an intentional same-day conflict.
 
 Desktop emulation cannot establish Android installation eligibility, the operating system's storage persistence/eviction behavior, native file picker integration, or launcher behavior. Chrome controls install-prompt availability.
+
+## Multi-trip update
+
+- 23 unit/API tests pass, including legacy single-trip migration, isolated people/weeks/goals/totals, device-only trip selection, concurrent trip additions, scoped edits on different trips, old queued edits targeting only the original trip, and malformed multi-trip backups.
+- Six multi-trip browser workflows pass: migration of an existing populated tracker; adding/switching/reopening separate trips; all trips shared by one invite link; offline edits on different trips; all-trip backup export and legacy single-trip restore; and requested table alignment, removed arrows/helper band, and mobile page width.
+- The prior 15 browser regression checks still pass with dropdown-only week navigation and version 2 backups. Shared-group regression checks cover the existing conflict/offline flows.
+- Physical Android still needs its install/update, native selector, file picker, and cross-phone airplane-mode checks. Close all old Tripon windows and reopen to activate the updated service worker before checking Add Trip.

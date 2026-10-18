@@ -1,3 +1,4 @@
+import {workspaceFrom} from '../public/trips.js';
 import {validateData} from '../public/core.js';
 import {applyChanges,SyncConflict,shared} from '../public/sync-core.js';
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store','x-content-type-options':'nosniff'}});
@@ -8,7 +9,7 @@ export async function api(request,env){
   if(!env.DB)return json({error:'Group storage is unavailable. Your local records are safe.'},503);
   try{
     if(request.method==='POST'&&url.pathname==='/api/groups'){
-      const body=await readJson(request),document=shared(validateData(body.data));
+      const body=await readJson(request),document=shared(body.data?.version===2?workspaceFrom(body.data):validateData(body.data));
       const id=crypto.randomUUID(),key=Array.from(crypto.getRandomValues(new Uint8Array(32)),v=>v.toString(16).padStart(2,'0')).join('');
       await env.DB.prepare('INSERT INTO tripon_groups (id,key_hash,document) VALUES (?,?,?)').bind(id,await hash(key),JSON.stringify(document)).run();
       return json({id,key,data:document,revision:1},201);
