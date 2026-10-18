@@ -31,11 +31,18 @@ function namedPerson(trip,name){
   if(matches.length!==1)throw new Error(matches.length?'That name matches more than one person. Rename them to use unique names.':'No person has that name in this trip. Use their full name or add them first.');
   return matches[0];
 }
+function checkedNewPeople(trip,names){
+  if(!names.length||names.some(name=>!name||name.length>60||/[\r\n;,]|\b(?:then|gave|paid|delete|remove)\b/i.test(name)))throw new Error('List names of up to 60 characters, separated by commas or “and”.');
+  if(trip.people.length+names.length>200)throw new Error('A trip can have at most 200 people.');
+  const seen=new Set(trip.people.map(person=>person.name.toLocaleLowerCase()));
+  for(const name of names){const key=name.toLocaleLowerCase();if(seen.has(key))throw new Error(`${name} already exists or is listed twice. List each new person only once.`);seen.add(key);}
+  return names;
+}
 export function parseAssistantCommand(text,trip){
   let input=String(text).trim().replace(/[.!?]$/,'').replace(/\s+/g,' ');
   if(!input||input.length>500)throw new Error('Enter a command with up to 500 characters.');
   const add=input.match(/^add\s+(?:a\s+)?person\s+(.+)$/i);
-  if(add){const name=add[1].trim();if(name.length>60||/[\r\n;]|\s(?:and|then)\s/i.test(name))throw new Error('Add one person at a time, with a name of up to 60 characters.');if(trip.people.length>=200)throw new Error('This trip already has 200 people.');if(trip.people.some(p=>p.name.toLocaleLowerCase()===name.toLocaleLowerCase()))throw new Error('That name already exists in this trip.');return {type:'person-add',name};}
+  if(add&&!/,|\s+and\s+/i.test(add[1])){const [name]=checkedNewPeople(trip,[add[1].trim()]);return {type:'person-add',name};}
   const datedWeek=input.match(/^(?:add|create)\s+(?:(?:a|the)\s+)?(?:new\s+)?week\s+(?:starting(?:\s+on)?|from|on)\s+(.+)$/i);
   if(datedWeek||/^(?:add|create)\s+(?:(?:the|a)\s+)?(?:next|new)\s+week$/i.test(input)){
     if(trip.weeks.length>=1000)throw new Error('This trip already has 1,000 weeks.');
@@ -51,6 +58,11 @@ export function parseAssistantCommand(text,trip){
     if(period==='this month')month=localDate().slice(0,7);
     else if(period.startsWith('month ')){month=period.slice(6);if(!/^(?:19\d{2}|[2-9]\d{3})-(?:0[1-9]|1[0-2])$/.test(month))throw new Error('Use a valid month, such as month 2026-10.');}
     return {type:'query',personId:person.id,personName:person.name,weekId,month};
+  }
+  const peopleAdd=input.match(/^add\s+(?:(?:people|persons|person)\s+)?(.+)$/i);
+  if(peopleAdd&&/,|\s+and\s+/i.test(peopleAdd[1])){
+    const names=peopleAdd[1].split(/\s*,\s*(?:and\s+)?|\s+and\s+/i).map(name=>name.trim());
+    return {type:'people-add',names:checkedNewPeople(trip,names)};
   }
   const tokens=[...input.matchAll(/\b(?:via|using|by|in)\s+(cash|gcash)\b/gi)];
   if(tokens.length>1)throw new Error('Use one payment method per command: Cash or GCash.');
@@ -69,6 +81,10 @@ export function parseAssistantCommand(text,trip){
   return {type:'contribution',...parseContributionCommand(input,trip),method};
 }
 export function applyAssistantAction(trip,action){
+  if(action.type==='people-add'){
+    const names=checkedNewPeople(trip,action.names);
+    const people=names.map(name=>({id:uid(),name}));trip.people.push(...people);return;
+  }
   if(action.type==='person-add'){
     const checked=parseAssistantCommand('add person '+action.name,trip);trip.people.push({id:uid(),name:checked.name});return;
   }

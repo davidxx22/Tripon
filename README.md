@@ -6,7 +6,7 @@ A clean group travel savings tracker. Initial destination: **Samal**. No account
 
 ## Navigation
 
-The bottom navigation separates **Home** (savings overview), **Transactions** (daily contribution table and weeks), **People** (person totals with week/month filters), and **Settings** (profile, appearance, group sharing and backups). Only the content pane scrolls; the header and navigation occupy separate app rows sized to the visual viewport, and the chat button is anchored above the navigation. Settings hides the trip selector, Add Trip control, and destination heading; they remain available in other views. The old footer is removed. Installation help lives beside backups in Settings, and save failures still show a visible alert. There is no Google sign-in or account requirement.
+The bottom navigation separates **Home** (savings overview), **Transactions** (daily contribution table and weeks), **History** (dated contribution cards with search, date and payment-method filters), **People** (person totals with week/month filters), and **Settings** (profile, appearance, group sharing and backups). Only the content pane scrolls; the header and navigation occupy separate app rows sized to the visual viewport, and the chat button is anchored above the navigation. Settings hides the trip selector, Add Trip control, and destination heading; they remain available in other views. The old footer is removed. Installation help lives beside backups in Settings, and save failures still show a visible alert. There is no Google sign-in or account requirement.
 
 ## Your local profile
 
@@ -160,3 +160,11 @@ Vercel serves the PWA and a Node.js API proxy at `api/sync.js`. The proxy forwar
 Browser-local records and installed-app data do not move automatically between different hosting domains. On Vercel, paste your existing Sites group invite into **Join group** to reconnect to the same shared records; new invite links use the Vercel domain. For device-only records, export from the old URL and restore the JSON on the new URL. Install the new Vercel URL from Chrome if switching your home-screen app.
 
 Vercel's Node.js function and project configuration references: https://vercel.com/docs/functions/runtimes/node-js and https://vercel.com/docs/project-configuration/vercel-json.
+
+## Bulk people and contribution history
+
+On a new empty trip, ask the assistant “Add David, Azel, and Kian”. Review the list and confirm to add everyone together with no amounts. Existing or repeated names are rejected without adding anyone.
+
+History groups positive daily entries by their assigned contribution date, with daily totals and Cash/GCash labels. Tap a card to edit its record. Search by name, pick a date, or filter payment methods; combined labels match each included method. History reflects current records, not an immutable audit log: edits and deletions update it, and actual payment times are not known. Weekly splits appear on each assigned day. Sample trips remain labeled as samples. No extra data migration is required.
+
+Run `npm run test:history` for bulk-add previews, duplicates, dated history/filtering, editing, backups, trip isolation, mobile themes/dock, group syncing and offline reload.
