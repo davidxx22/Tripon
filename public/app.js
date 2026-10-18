@@ -95,7 +95,7 @@ $('delete-week').disabled=data.weeks.length===1;
 function currentWeek(){return data.weeks.find(w=>w.id===data.selectedWeekId)||data.weeks[0];}
 const modal=$('modal');
 let dialogOpener;
-function resumeAfterDialog(){queueMicrotask(()=>{if(!modal.open){const target=dialogOpener?.isConnected&&!dialogOpener.closest('dialog')&&!dialogOpener.matches('.skip')?dialogOpener:$('main');target.focus({preventScroll:true});if(sync){sync.paused=false;void sync.flush();}}});}
+function resumeAfterDialog(){queueMicrotask(()=>{if(!modal.open){const target=dialogOpener?.isConnected&&dialogOpener.getClientRects().length&&!dialogOpener.closest('dialog')&&!dialogOpener.matches('.skip')?dialogOpener:$('main');target.focus({preventScroll:true});if(sync){sync.paused=false;void sync.flush();}}});}
 function close(){modal.close();resumeAfterDialog();}
 modal.addEventListener('cancel',resumeAfterDialog);
 function openDialog(title,copy,body,setup){
@@ -197,12 +197,16 @@ function tripSettings(){formDialog('Trip settings','Set the destination and a ta
   const destination=f.get('destination').trim();if(!destination)throw new Error('Enter a destination.');const goalCents=amount(f.get('goal'));
   data.destination=destination;data.goalCents=goalCents;close();commit('Trip settings saved.');
 },'<button type="button" class="text-button destructive" id="delete-trip">Delete Trip</button>');
-$('delete-trip').onclick=()=>{
+$('delete-trip').onclick=confirmTripDeletion;
+}
+function confirmTripDeletion(){
+  if(!workspace.selectedTripId)return;
   const tripId=workspace.selectedTripId,trip=data;
   confirmDialog(`Delete ${trip.destination}?`,`Permanently remove this trip’s savings goal, ${trip.people.length} people, ${trip.weeks.length} weeks, and ${money(tripTotal(trip))}${trip.demo?' in sample contributions':' in recorded contributions'}${sync?.state?' for everyone in this group':''}. Other trips and their records are kept. This cannot be undone without a backup. Export a backup before deleting if needed.`,()=>{
     pack();removeTrip(workspace,tripId);data=currentTrip(workspace)||newTracker();data.theme=workspace.theme;close();commit('Trip deleted. Other trips are unchanged.');
   },'Delete Trip');
-};}
+}
+$('delete-trip-home').onclick=confirmTripDeletion;
 function editContribution(personId,day){const person=data.people.find(p=>p.id===personId),w=currentWeek();formDialog(`${person.name} · Day ${day+1}`,`${dateLabel(addDays(w.start,day),true)}${data.demo?' · Sample contribution':''}`,`<label class="field">Contribution (₱)<input name="value" inputmode="decimal" value="${((w.entries[personId]?.[day]||0)/100).toFixed(2)}" required><small>Zero or a positive amount, with up to two decimal places.</small></label><label class="field">Payment method<select name="method">${paymentOptions(paymentMethod(w,personId,day))}</select><small>Cash or GCash is a record label, not payment verification. Combined labels do not specify how much came through each method.</small></label>`,f=>{const value=amount(f.get('value'));w.entries[personId]||=Array(5).fill(0);w.entries[personId][day]=value;setPaymentMethod(w,personId,day,f.get('method'));close();commit();notify(data.demo?'Sample contribution updated.':'Contribution recorded.');});}
 function personEditor(id){const person=data.people.find(p=>p.id===id);if(!person&&data.people.length>=200){notify('This tracker supports up to 200 people.');return;}
   formDialog(person?'Manage person':'Add to the crew','People appear in every week. Each week keeps its own contributions.',`<label class="field">Name<input name="name" value="${escape(person?.name||'')}" maxlength="60" required autocomplete="off"></label>`,f=>{const name=f.get('name').trim();if(!name)throw new Error('Enter a name.');if(person)person.name=name;else data.people.push({id:uid(),name});close();commit(person?'Name updated.':'Person added to all weeks.');},person?'<button type="button" class="text-button destructive" id="remove-person">Remove person</button>':'');
@@ -277,8 +281,8 @@ $('review-sync').onclick=()=>{
 $('trip-select').onchange=e=>{pack();workspace.selectedTripId=e.target.value;data=currentTrip(workspace)||newTracker();data.theme=workspace.theme;commit();};
 $('add-trip').onclick=()=>{
   if(workspace.trips.length>=50){notify('This group supports up to 50 trips.');return;}
-  formDialog('Add trip','This trip gets its own people, weeks, contributions and savings goal. Shared groups sync it to everyone.',`<label class="field">Trip destination<input name="destination" maxlength="80" required placeholder="e.g. Siargao"></label><label class="field">Savings goal (₱)<input name="goal" inputmode="decimal" value="0.00" required></label>`,f=>{
+  formDialog('Add trip','Start with an empty table, then add your people. This trip keeps its own weeks, contributions and goal. Shared groups sync it to everyone.',`<label class="field">Trip destination<input name="destination" maxlength="80" required placeholder="e.g. Siargao"></label><label class="field">Savings goal (₱)<input name="goal" inputmode="decimal" value="0.00" required></label>`,f=>{
     const destination=f.get('destination').trim();if(!destination)throw new Error('Enter a destination.');const goalCents=amount(f.get('goal'));
-    pack();const trip={id:uid(),...newTracker()};trip.destination=destination;trip.goalCents=goalCents;trip.theme=workspace.theme;workspace.trips.push(trip);workspace.selectedTripId=trip.id;data=trip;close();commit('Trip added.');
+    pack();const trip={id:uid(),...newTracker(),people:[]};trip.destination=destination;trip.goalCents=goalCents;trip.theme=workspace.theme;workspace.trips.push(trip);workspace.selectedTripId=trip.id;data=trip;close();commit('Trip added.');
   });
 };
