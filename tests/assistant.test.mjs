@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {newTracker,blankWeek,MAX_CENTS,tripTotal} from '../public/core.js';
+import {newTracker,blankWeek,MAX_CENTS,tripTotal,personWeek} from '../public/core.js';
 import {parseContributionCommand as parse,previewContribution as preview,applyContributionPreview as apply} from '../public/assistant.js';
 test('offline assistant understands weekly totals, explicit daily splits and exact centavos',()=>{
  const t=newTracker(),original=JSON.stringify(t);
@@ -65,4 +65,19 @@ test('specific-date contributions target one daily cell and reject missing or am
  const c=command('David paid 50 pesos on October 1, 2026',t);assert.deepEqual(c.days,[3]);const plan=preview(t,c);assert.deepEqual(t.weeks[0].entries,{});apply(t,plan);assert.deepEqual(t.weeks[0].entries[t.people[0].id],[0,0,0,5000,0]);
  assert.throws(()=>command('David 10 on 2026-10-03',t),/No matching week/);assert.throws(()=>command('David 10 on 2026-02-30',t),/not valid/);
  t.weeks.push(blankWeek('2026-10-01'));assert.throws(()=>command('David 10 on 2026-10-01',t),/overlapping/);assert.equal(command('David 10 on 2026-10-01 in week 2',t).weekId,t.weeks[1].id);
+});
+test('explicit five-day ranges support inherited years and the screenshot wording',async()=>{
+ const {assistantRange,parseAssistantCommand:command,applyAssistantAction:act}=await import('../public/assistant.js');
+ assert.deepEqual(assistantRange('September 28 to October 2, 2026'),{start:'2026-09-28',end:'2026-10-02'});assert.deepEqual(assistantRange('December 28 to January 1, 2027'),{start:'2026-12-28',end:'2027-01-01'});
+ for(const text of ['October 5 to October 10, 2026','October 9, 2026 to October 5, 2026','February 30 to March 6, 2026'])assert.throws(()=>assistantRange(text));
+ const t=newTracker();t.weeks=[blankWeek('2026-09-28')];t.selectedWeekId=t.weeks[0].id;const c=command('David gave 50 pesos for September 28 to October 2, 2026, split 10 each day',t);assert.deepEqual(c.values,Array(5).fill(1000));assert.throws(()=>command('David gave 50 pesos for September 28 to October 2, 2026, split 20 each day',t),/equal/);
+ const week=command('Add week starting October 05, 2026 to October 09, 2026',t);assert.equal(week.end,'2026-10-09');act(t,week);assert.equal(t.weeks[1].start,'2026-10-05');
+});
+test('multi-person commands preview allocations explicitly and apply atomically',async()=>{
+ const {parseAssistantCommand:command,previewBatch:batch,applyBatchPreview:applyBatch}=await import('../public/assistant.js');const t=newTracker();t.people.push({id:'azel',name:'Azel'});
+ const c=command('David, Azel, and Kian gave 50 today, split equally this week',t);assert.equal(c.type,'contribution-batch');assert.equal(c.commands.length,3);assert.equal(batch(t,c,undefined,'').needsChoice,true);
+ const each=batch(t,c,undefined,'each');assert.equal(each.total,15000);assert.equal(tripTotal(t),0);applyBatch(t,each);assert.equal(tripTotal(t),15000);
+ const combined=batch(t,c,'replace','combined');assert.equal(combined.total,5000);applyBatch(t,combined);assert.equal(tripTotal(t),5000);assert.equal(personWeek(t.weeks[0],'azel'),1667);
+ const stale=batch(t,c,'add','each'),before=tripTotal(t);t.weeks[0].entries.azel[4]++;assert.throws(()=>applyBatch(t,stale),/changed/);assert.equal(tripTotal(t),before+1);
+ assert.throws(()=>command('David, Unknown, and Kian gave 50 today, split equally this week',t),/No person/);assert.throws(()=>command('David and David gave 50 this week',t),/once/);
 });

@@ -13,6 +13,15 @@ export function assistantDate(text){
   if(!validDate(result))throw new Error('That calendar date is not valid. Include the year, for example 2026-09-28.');
   return result;
 }
+export function assistantRange(text){
+  const parts=text.trim().split(/\s+(?:to|through|until|–)\s+/i);
+  if(parts.length!==2)throw new Error('Use a date range such as September 28 to October 2, 2026.');
+  const end=assistantDate(parts[1]),hasYear=/\b\d{4}\b/.test(parts[0]);
+  let start=assistantDate(hasYear?parts[0]:parts[0]+', '+end.slice(0,4));
+  if(!hasYear&&start>end)start=assistantDate(parts[0]+', '+(Number(end.slice(0,4))-1));
+  if(addDays(start,4)!==end)throw new Error('A week must contain five consecutive days. Its last date must be four days after the first.');
+  return {start,end};
+}
 
 export function personPeriodTotal(trip,personId,{weekId,month}={}){
   return trip.weeks.reduce((sum,week)=>sum+(weekId&&week.id!==weekId?0:(week.entries[personId]||[]).reduce((n,value,day)=>n+(!month||addDays(week.start,day).slice(0,7)===month?value:0),0)),0);
@@ -30,7 +39,7 @@ export function parseAssistantCommand(text,trip){
   const datedWeek=input.match(/^(?:add|create)\s+(?:(?:a|the)\s+)?(?:new\s+)?week\s+(?:starting(?:\s+on)?|from|on)\s+(.+)$/i);
   if(datedWeek||/^(?:add|create)\s+(?:(?:the|a)\s+)?(?:next|new)\s+week$/i.test(input)){
     if(trip.weeks.length>=1000)throw new Error('This trip already has 1,000 weeks.');
-    const latest=trip.weeks.reduce((a,b)=>a.end>b.end?a:b),start=datedWeek?assistantDate(datedWeek[1]):addDays(latest.end,1);
+    const latest=trip.weeks.reduce((a,b)=>a.end>b.end?a:b),start=datedWeek?(/\s+(?:to|through|until|–)\s+/i.test(datedWeek[1])?assistantRange(datedWeek[1]).start:assistantDate(datedWeek[1])):addDays(latest.end,1);
     if(start>'9998-12-27')throw new Error('The next week exceeds the supported date range.');
     if(trip.weeks.some(w=>w.start===start))throw new Error('A week already starts on that date. Select that week to record contributions.');
     return {type:'week-add',start,end:addDays(start,4),previousEnd:latest.end,dated:!!datedWeek};
@@ -43,6 +52,16 @@ export function parseAssistantCommand(text,trip){
     else if(period.startsWith('month ')){month=period.slice(6);if(!/^(?:19\d{2}|[2-9]\d{3})-(?:0[1-9]|1[0-2])$/.test(month))throw new Error('Use a valid month, such as month 2026-10.');}
     return {type:'query',personId:person.id,personName:person.name,weekId,month};
   }
+  const batch=input.match(/^(.+?)\s+(gave|give|paid|contributed|saved)\s+(.+)$/i);
+  if(batch&&/,|\s+and\s+/i.test(batch[1])&&!trip.people.some(p=>p.name.toLowerCase()===batch[1].toLowerCase())){
+    const names=batch[1].split(/\s*,\s*(?:and\s+)?|\s+and\s+/i).filter(Boolean),people=names.map(name=>namedPerson(trip,name));
+    if(people.length<2||new Set(people.map(p=>p.id)).size!==people.length)throw new Error('List each person once, using their full name.');
+    const body=batch[3].replace(/\btoday\s*,?\s*(?:split|distribute)\s+equally\s+(?:this|selected)\s+week$/i,'this week, split equally');
+    const commands=people.map(person=>parseContributionCommand(person.name+' '+batch[2]+' '+body,trip));
+    return {type:'contribution-batch',commands};
+  }
+  const today=input.match(/^(.+?)\s+(gave|give|paid|contributed|saved)\s+(.+?)\s+today\s*,?\s*(?:split|distribute)\s+equally\s+(?:this|selected)\s+week$/i);
+  if(today)return {type:'contribution',...parseContributionCommand(today[1]+' '+today[2]+' '+today[3]+' this week, split equally',trip)};
   return {type:'contribution',...parseContributionCommand(input,trip)};
 }
 export function applyAssistantAction(trip,action){
@@ -67,6 +86,12 @@ export function parseContributionCommand(text,trip){
   const person=names[0];
   if(trip.people.filter(p=>p.name.toLocaleLowerCase()===person.name.toLocaleLowerCase()).length!==1)throw new Error('More than one person has that name. Rename them so each name is unique.');
   const body=input.slice(person.name.length).trim();
+  const range=body.match(/^(?:(?:contributed|gave|give|paid|saved|save|add|set|fill)\s+)?(?:₱\s*|PHP\s*)?(\d+(?:\.\d{1,2})?)(?:\s*(?:pesos?|PHP))?\s+for\s+(.+?\s+(?:to|through|until|–)\s+.+?)(\s*,?\s+(?:split|distribute)\b.*)?$/i);
+  if(range){
+    const dates=assistantRange(range[2]),index=trip.weeks.findIndex(w=>w.start===dates.start&&w.end===dates.end);
+    if(index<0)throw new Error('No week matches that range. First use “Add week starting '+dates.start+' to '+dates.end+'”.');
+    return parseContributionCommand(person.name+' '+range[1]+' week '+(index+1)+(range[3]||''),trip);
+  }
   const dated=body.match(/^(?:(?:contributed|gave|give|paid|saved|save|add|set|fill)\s+)?(?:₱\s*|PHP\s*)?(\d+(?:\.\d{1,2})?)(?:\s*(?:pesos?|PHP))?\s+(?:on|for)\s+(\d{4}-\d{2}-\d{2}|[a-z]+\s+\d{1,2},?\s+\d{4}|\d{1,2}\s+[a-z]+\s+\d{4})(?:\s+(?:in\s+)?week\s+(\d+))?$/i);
   if(dated){
     const date=assistantDate(dated[2]),cents=amount(dated[1]),matches=trip.weeks.filter((w,i)=>(!dated[3]||i===Number(dated[3])-1)&&w.start<=date&&w.end>=date);
@@ -96,6 +121,24 @@ export function parseContributionCommand(text,trip){
   const days=day?[Number(day[1])-1]:[0,1,2,3,4];
   const values=days.map((_,i)=>day||perDay?cents:daily??Math.floor(cents/5)+(i<cents%5?1:0));
   return {personId:person.id,personName:person.name,weekId:week.id,start:week.start,end:week.end,days,values,total:values.reduce((a,b)=>a+b,0),split:!day&&!perDay};
+}
+
+export function previewBatch(trip,batch,mode,allocation){
+  if(!['each','combined'].includes(allocation))return {needsChoice:true};
+  const commands=batch.commands.map(c=>({...c,days:[...c.days],values:[...c.values]}));
+  if(allocation==='combined'){
+    const total=commands[0].total,n=commands.length;
+    commands.forEach((c,i)=>{c.total=Math.floor(total/n)+(i<total%n?1:0);c.values=c.days.map((_,day)=>Math.floor(c.total/c.days.length)+(day<c.total%c.days.length?1:0));});
+  }
+  const plans=commands.map(c=>previewContribution(trip,c,mode));
+  return {needsChoice:plans.some(p=>p.needsChoice),plans,allocation,total:commands.reduce((sum,c)=>sum+c.total,0)};
+}
+export function applyBatchPreview(trip,batchPlan){
+  if(batchPlan.needsChoice||!batchPlan.plans)throw new Error('Choose the amount allocation and preview all changes first.');
+  const copy=structuredClone(trip);
+  for(const plan of batchPlan.plans)applyContributionPreview(copy,plan);
+  // Validate the whole operation before changing a single person’s actual records.
+  for(const plan of batchPlan.plans)trip.weeks.find(w=>w.id===plan.command.weekId).entries[plan.command.personId]=[...plan.after];
 }
 
 export function previewContribution(trip,command,mode){

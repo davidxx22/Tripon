@@ -6,6 +6,8 @@ A clean group travel savings tracker. Initial destination: **Samal**. No account
 
 ## Offline assistant and person totals
 
+The bottom navigation separates **Home** (savings overview), **Transactions** (daily contribution table and weeks), **People** (person totals with week/month filters), and **Settings** (group sharing and backups). The chat button is anchored to the same viewport dock above the navigation, with safe-area spacing for phones. Sign-in is not currently required; Google account setup is pending a configured authentication provider.
+
 Open **Tripon assistant** and enter one simple command at a time:
 
 - `David contributed 50 pesos this week` splits a weekly total across the five days.
@@ -16,6 +18,9 @@ Open **Tripon assistant** and enter one simple command at a time:
 - `Add next week` creates five days after the latest saved week's end, then selects it.
 - `Add week starting September 28, 2026` or `Add week from 2026-09-28` creates five days starting on a specific date (include the year).
 - `David 50 on 2026-10-01` records one day in an existing week containing that date. If weeks overlap, specify `in week 2`. Missing weeks, invalid dates, and duplicate start dates show an error without changing records.
+- `Add week starting October 05, 2026 to October 09, 2026` accepts an explicit five-day range. The year may appear only at the end, such as `September 28 to October 2, 2026`. Other lengths are rejected because the table has five consecutive days.
+- `David gave 50 pesos for September 28 to October 2, 2026, split 10 each day` uses the existing week matching that exact range, and checks that the five daily amounts equal the total.
+- `David, Azel, and Kian gave 50 today, split equally this week` lists multiple existing people. The preview requires choosing **₱50 per person** or **₱50 combined**, plus **Add** or **Replace** if any named person has existing entries. All changes are validated together before any are applied. With `today, split equally this week`, the contribution is allocated to the selected week's daily entries, rather than today's cell alone.
 - `How much does Azel payment total?` shows all-time, selected-week, and current-month records.
 - `Show Azel total week 2` or `Show Azel total month 2026-10` asks about a specific period.
 
@@ -24,6 +29,8 @@ The assistant is a deterministic offline command parser, not an online AI servic
 In **People totals**, choose **All time**, **Selected week**, or **Month** and pick a month. Monthly totals sum each daily entry by its actual date, including weeks crossing month/year boundaries. “This week” in a command means the selected week; “this month” means the current calendar month on the device. These are recorded contributions, not verified payments.
 
 Run `npm run test:assistant` against the local server (or set `TRIPON_TEST_URL` to a deployment). It checks preview/cancel, add/replace, person/week creation, period queries, month boundaries, offline persistence, mobile themes, and syncing between independent profiles.
+
+Run `npm run test:ranges` for the reported date-range wording, multi-person allocation, dock/navigation layout, offline persistence and group syncing. Mobile browser chrome behavior should also be checked on a physical iPhone/Android device; automated viewport scroll/resize tests cannot fully simulate the operating system's toolbars.
 
 ## Multiple trips
 
