@@ -4,9 +4,19 @@ A clean group travel savings tracker. Initial destination: **Samal**. No account
 
 **Live app:** https://tripon-david.vercel.app
 
-## Offline assistant and person totals
+## Navigation
 
-The bottom navigation separates **Home** (savings overview), **Transactions** (daily contribution table and weeks), **People** (person totals with week/month filters), and **Settings** (group sharing and backups). The chat button is anchored to the same viewport dock above the navigation, with safe-area spacing for phones. Sign-in is not currently required; Google account setup is pending a configured authentication provider.
+The bottom navigation separates **Home** (savings overview), **Transactions** (daily contribution table and weeks), **People** (person totals with week/month filters), and **Settings** (profile, appearance, group sharing and backups). The chat button is anchored to the same viewport dock above the navigation, with safe-area spacing for phones. There is no Google sign-in or account requirement.
+
+## Your local profile
+
+First-time setup offers a display name and optional photo. Tap the top-right profile icon, or **Settings → Edit profile**, to edit the name, change the picture, or remove it. Names can contain up to 60 characters. JPG, PNG and WebP photos up to 8 MB are cropped/resized in the browser into a small 256×256 JPEG; the original is not uploaded. Missing photos show initials.
+
+The profile is stored separately on the current device under `tripon.profile.v1`. It works offline, persists after reopening, and is not a login or a way to verify a contributor's identity. Profile names do not rename people in trip records. Group sharing and JSON backups never include the profile or photo; joining/restoring a group leaves this phone's profile intact. Clearing browser data removes it. Each phone can use its own profile.
+
+The **Dark mode** switch now lives in **Settings → Appearance**. Run `npm run test:profile` for setup, photo validation, cancel/save, offline persistence, storage failures, and profile isolation between phones.
+
+## Offline assistant and person totals
 
 Open **Tripon assistant** and enter one simple command at a time:
 
@@ -102,7 +112,7 @@ The service worker caches only the app shell, never `/api/`. Increment its cache
 
 ## Install on Android
 
-Open the group invite link in Chrome, join, wait for **Offline ready**, and choose **Install app** or **⋮ → Add to home screen → Install**. Launch Tripon from the home screen. First-time joining requires internet; offline edits afterward queue until reconnecting. Appearance uses a **Dark mode** switch in the header: on for dark, off for light. The selection is saved on each device; new trackers start in light mode. Existing dark/light choices are preserved. Older System backup preferences open in light mode.
+Open the group invite link in Chrome, join, wait for **Offline ready**, and choose **Install app** or **⋮ → Add to home screen → Install**. Launch Tripon from the home screen. First-time joining requires internet; offline edits afterward queue until reconnecting. Appearance uses a **Dark mode** switch in **Settings → Appearance**: on for dark, off for light. The selection is saved on each device; new trackers start in light mode. Existing dark/light choices are preserved. Older System backup preferences open in light mode.
 
 Real Android launcher, install prompt, file picker, and airplane-mode behavior still need a physical-phone check. See [TESTING.md](TESTING.md).
 

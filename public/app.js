@@ -1,9 +1,34 @@
 import {workspaceFrom,newWorkspace,currentTrip,removeTrip} from './trips.js';
 import {GroupSync,inviteFromHash} from './sync.js';
+import {PROFILE_KEY,validateProfile,profileInitials,prepareProfilePhoto} from './profile.js';
 import {parseAssistantCommand,previewContribution,applyContributionPreview,applyAssistantAction,personPeriodTotal,previewBatch,applyBatchPreview} from './assistant.js';
 import {STORAGE_KEY, amount, money, newTracker, blankWeek, addDays, dateLabel, localDate, personWeek, personTotal, weekTotal, tripTotal, progress, uid, deletePerson, deleteWeek, validateData} from './core.js';
 const $ = id => document.getElementById(id);
 const escape = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let profile=null;
+try{const raw=localStorage.getItem(PROFILE_KEY);if(raw)profile=validateProfile(JSON.parse(raw));}catch{/* A damaged local profile never blocks savings records. */}
+function profileAvatar(element,value=profile){
+  element.replaceChildren();
+  if(value?.photo){const image=document.createElement('img');image.src=value.photo;image.alt='';element.append(image);}else element.textContent=profileInitials(value?.name||'Traveler');
+}
+function renderProfile(){
+  profileAvatar($('profile-icon'));profileAvatar($('settings-avatar'));
+  $('profile-name').textContent=profile?.name||'Traveler';$('profile-open').setAttribute('aria-label',`Edit profile${profile?' for '+profile.name:''}`);
+}
+function storeProfile(value){const next=validateProfile(value);localStorage.setItem(PROFILE_KEY,JSON.stringify(next));profile=next;renderProfile();}
+function profileFields(){return `<div class="profile-photo-row"><span id="profile-preview" class="profile-avatar large"></span><div><label class="field">Profile picture (optional)<input id="profile-file" type="file" accept="image/jpeg,image/png,image/webp"><small>JPG, PNG or WebP, up to 8 MB. Stored only on this device.</small></label><button id="profile-remove-photo" class="text-button" type="button">Remove photo</button></div></div><label class="field">Display name<input id="profile-display-name" maxlength="60" value="${escape(profile?.name||'Traveler')}" autocomplete="nickname" required></label><p id="profile-error" class="form-error" role="alert"></p>`;}
+function mountProfileFields(){
+  let photo=profile?.photo||'',pending=false,photoRequest=0;const field=$('profile-file'),name=$('profile-display-name'),error=$('profile-error'),preview=$('profile-preview'),remove=$('profile-remove-photo');
+  const draw=()=>{profileAvatar(preview,{name:name.value||'Traveler',photo});remove.hidden=!photo;};draw();name.oninput=draw;
+  field.onchange=async()=>{const file=field.files[0];if(!file)return;const request=++photoRequest;pending=true;error.textContent='Preparing photo…';try{const result=await prepareProfilePhoto(file);if(request!==photoRequest||!field.isConnected)return;photo=result;error.textContent='';draw();}catch(e){if(field.isConnected&&request===photoRequest)error.textContent=e.message;}finally{if(request===photoRequest)pending=false;field.value='';}};
+  remove.onclick=()=>{photoRequest++;pending=false;photo='';error.textContent='';draw();};
+  return ()=>{if(pending)throw new Error('Please wait for the photo to finish loading.');return validateProfile({version:1,name:name.value,photo});};
+}
+function profileEditor(){
+  openDialog('Your profile','This is a local profile, not a login. It does not change names in trip records or automatically sync your name/photo to other phones.',`<form id="profile-form">${profileFields()}<div class="form-actions"><button id="profile-cancel" type="button" class="button">Cancel</button><button type="submit" class="button primary">Save profile</button></div></form>`,()=>{
+    const read=mountProfileFields();$('profile-cancel').onclick=close;$('profile-form').onsubmit=e=>{e.preventDefault();try{const value=read();try{storeProfile(value);}catch{throw new Error('Your profile could not be saved on this device. Check browser storage and try again.');}close();notify('Profile saved on this device.');}catch(error){$('profile-error').textContent=error.message;}};
+  });
+}
 let sync, workspace;
 let activePage='home';
 function applyView(){
@@ -40,7 +65,7 @@ function render() {
   $('assistant-open').hidden=!hasTrips;
   $('trip-select').disabled=!hasTrips;$('edit-trip').hidden=!hasTrips;$('no-trips').hidden=hasTrips;for(const selector of ['.savings-panel','.tracker','.lower-grid'])document.querySelector(selector).hidden=!hasTrips;
   $('trip-select').innerHTML=workspace.trips.map(t=>`<option value="${escape(t.id)}" ${t.id===workspace.selectedTripId?'selected':''}>${escape(t.id===workspace.selectedTripId?data.destination:t.destination)}${(t.id===workspace.selectedTripId?data.demo:t.demo)?' · sample':''}</option>`).join('')||'<option>No trips yet</option>';
-  applyTheme(); const w=currentWeek(), i=data.weeks.findIndex(x=>x.id===w.id), p=progress(data);
+  applyTheme();renderProfile(); const w=currentWeek(), i=data.weeks.findIndex(x=>x.id===w.id), p=progress(data);
   $('trip-heading').textContent=hasTrips?data.destination:'No trips yet';document.querySelector('.intro-copy').textContent=hasTrips?'Group travel savings':'Add a trip to start recording contributions.';document.title=hasTrips?`Tripon · ${data.destination}`:'Tripon';
   $('demo-banner').hidden=!hasTrips||!data.demo;
   $('recorded-label').textContent=data.demo?'SAMPLE CONTRIBUTIONS · DEMO ONLY':'RECORDED CONTRIBUTIONS';
@@ -157,9 +182,10 @@ function assistantPreview(text,command,tripId){
 }
 $('assistant-open').onclick=()=>contributionAssistant();
 function welcome(){
-  openDialog('Welcome to Tripon','',`<img class="welcome-mark" src="./assets/icon.svg" alt="Tripon travel savings icon"><p class="welcome-title">Track your trip savings.</p><p class="dialog-copy">Record daily contributions and share a tracker with your group. Start with David, Vince, Deniele, and Kian — you can edit everyone.</p><div class="welcome-buttons"><button id="start-empty" class="button primary">Start empty tracker →</button><button id="start-demo" class="button">Explore demo · ₱10 per day</button></div><p class="external-note">No accounts needed. Create a shared group or join one with an invite link.</p>`,()=>{
-    $('start-empty').onclick=()=>{data=newTracker();close();commit('Your empty tracker is ready.');};
-    $('start-demo').onclick=()=>{data=newTracker(true);close();commit('Demo mode — sample contributions only.');};
+  openDialog('Welcome to Tripon','',`<p class="welcome-title">Make yourself at home.</p><p class="dialog-copy">Choose a display name and optional photo. Your profile stays on this device; there is no login. You can edit it later using the profile icon.</p>${!profile?profileFields():''}<div class="welcome-buttons"><button id="start-empty" class="button primary">Start empty tracker →</button><button id="start-demo" class="button">Explore demo · ₱10 per day</button></div><p class="external-note">Starter names: David, Vince, Deniele and Kian. Share a group invite link to sync trip records; profile details are not shared.</p>`,()=>{
+    const read=!profile?mountProfileFields():null;
+    const start=demo=>{try{if(read){const value=read();try{storeProfile(value);}catch{throw new Error('Profile could not be saved. Check browser storage and try again.');}}data=newTracker(demo);close();commit(demo?'Demo mode — sample contributions only.':'Your empty tracker is ready.');}catch(error){if($('profile-error'))$('profile-error').textContent=error.message;}};
+    $('start-empty').onclick=()=>start(false);$('start-demo').onclick=()=>start(true);
   });
 }
 function tripSettings(){formDialog('Trip settings','Set the destination and a target. Your target is separate from recorded contributions.',`<label class="field">Trip destination<input name="destination" value="${escape(data.destination)}" maxlength="80" required></label><label class="field">Savings goal (₱)<input name="goal" inputmode="decimal" value="${(data.goalCents/100).toFixed(2)}" required><small>Enter 0 to leave the goal unset. Up to two decimal places.</small></label>`,f=>{
@@ -186,6 +212,7 @@ function exportBackup(){download(JSON.stringify(pack(),null,2),`tripon-all-trips
 async function importBackup(file){if(!file)return;try{if(file.size>5*1024*1024)throw new Error('Backup is too large (maximum 5 MB).');const raw=JSON.parse(await file.text()),multiple=raw.version===2,candidate=multiple?workspaceFrom(raw):validateData(raw);confirmDialog('Restore this backup?',`Replace ${multiple?'all trips':'the selected trip'} ${sync?.state?'in the shared group’s records for everyone':'on this device'} with ${multiple?candidate.trips.length+' trips':candidate.destination+' · '+candidate.people.length+' people · '+money(tripTotal(candidate))}. Other trips are ${multiple?'replaced too':'kept'}. Appearance is restored on this device. Export a backup first if needed.`,()=>{if(multiple)useWorkspace(candidate,false);else{data=candidate;pack();}damaged=false;close();commit('Backup restored.');},'Replace and restore',false);}catch(err){openDialog('Backup not restored',err instanceof SyntaxError?'This file is not valid JSON. Select an unmodified Tripon JSON backup.':err.message,'<div class="form-actions"><button id="dismiss-import" class="button">Close</button></div>',()=>{$('dismiss-import').onclick=close;});}finally{$('import-file').value='';}}
 function installation(){const standalone=matchMedia('(display-mode: standalone)').matches||navigator.standalone;openDialog(standalone?'Tripon is installed':'Take Tripon with you',standalone?'You are already using Tripon as an installed app.':'Install from Chrome on Android for a home screen shortcut and a standalone app.',`<ol class="install-steps"><li>Open this app’s HTTPS link in <strong>Chrome</strong>.</li><li>Tap Chrome’s <strong>⋮ menu</strong>, then <strong>Add to home screen</strong> or <strong>Install app</strong>.</li><li>Confirm <strong>Install</strong>. Open Tripon from its new icon.</li></ol><p class="external-note">Wait for “Offline ready” below before going offline. Open the same group invite link on every phone to sync records. Offline edits sync when you reconnect. Keep an exported backup too.</p><p id="offline-detail" class="dialog-copy">${escape($('connection').textContent)}</p><div class="form-actions"><button id="install-close" class="button">Got it</button></div>`,()=>{$('install-close').onclick=close;});}
 $('edit-trip').onclick=tripSettings;
+$('profile-open').onclick=profileEditor;$('profile-edit').onclick=profileEditor;
 $('theme').onchange=e=>{data.theme=e.target.checked?'dark':'light';applyTheme();save();};
 $('how-install').onclick=installation;
 $('totals-month').value=localDate().slice(0,7);
