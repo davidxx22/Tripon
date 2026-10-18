@@ -1,0 +1,16 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "node scripts/check.mjs",
+  "outputDirectory": "public",
+  "installCommand": "npm install --omit=dev --ignore-scripts --package-lock=false",
+  "functions": { "api/sync.js": { "maxDuration": 15 } },
+  "rewrites": [
+    { "source": "/api/groups", "destination": "/api/sync" },
+    { "source": "/api/groups/:id", "destination": "/api/sync?groupId=:id" }
+  ],
+  "headers": [
+    { "source": "/sw.js", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },
+    { "source": "/(.*)", "headers": [{ "key": "Referrer-Policy", "value": "no-referrer" }, { "key": "X-Content-Type-Options", "value": "nosniff" }] }
+  ]
+}

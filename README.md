@@ -102,3 +102,13 @@ Browser tests accept `TRIPON_TEST_URL`, `TRIPON_CHROME`, and `TRIPON_NODE_MODULE
 - `public/assets/icon-192.png`, `icon-512.png`, `icon-maskable-512.png`: installation icons with safe padding.
 
 The original logo combines a travel case, two companion coins, and a rising route arrow. It remains in the simplified header, favicon, and installed icons.
+
+## Vercel deployment
+
+Import `davidxx22/Tripon`, name the Vercel project `tripon` (lowercase), keep Root Directory `./` and preset **Other**. The tracked `vercel.json` sets build command `node scripts/check.mjs`, output directory `public`, and a production-only dependency install. No environment variables are required.
+
+Vercel serves the PWA and a Node.js API proxy at `api/sync.js`. The proxy forwards only the group authorization header and JSON request to the fixed existing Sites API. This preserves existing groups and the existing D1 database; it does not migrate the database into Vercel or add another paid data service. Keep the existing Sites API online. Vercel sync requests are limited to 4 MB. There are no user accounts in Tripon.
+
+Browser-local records and installed-app data do not move automatically between different hosting domains. On Vercel, paste your existing Sites group invite into **Join group** to reconnect to the same shared records; new invite links use the Vercel domain. For device-only records, export from the old URL and restore the JSON on the new URL. Install the new Vercel URL from Chrome if switching your home-screen app.
+
+Vercel's Node.js function and project configuration references: https://vercel.com/docs/functions/runtimes/node-js and https://vercel.com/docs/project-configuration/vercel-json.

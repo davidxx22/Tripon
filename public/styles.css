@@ -22,3 +22,24 @@ main{padding-top:28px}.trip-intro{margin-bottom:20px}.destination-row h1{font-si
 .week-choice label{position:relative;display:inline-block}
 #week-select{appearance:none;-webkit-appearance:none;padding-right:44px}
 .week-choice label::after{content:'';position:absolute;right:17px;top:50%;width:7px;height:7px;border-right:2px solid var(--teal);border-bottom:2px solid var(--teal);transform:translateY(-70%) rotate(45deg);pointer-events:none}
+/* Mobile tracker: keep the week and its actions together above the table. */
+.week-tools .destructive{border:1px solid var(--border)}
+.savings-main>div{min-width:0;width:100%}
+.big-money{font-size:clamp(28px,7vw,44px);overflow-wrap:anywhere}
+@media(max-width:700px){
+  .savings-panel{padding:20px;border-radius:14px}
+  .savings-panel .eyebrow{font-size:11px;letter-spacing:.6px}
+  .savings-panel .big-money{margin:4px 0;font-size:clamp(28px,9vw,40px);line-height:1.25}
+  .progress-labels{margin-top:18px;padding-top:16px;border-top:1px solid var(--border);gap:12px;font-size:12px}
+  .tracker{margin-top:28px}
+  .tracker>.section-top{margin-bottom:16px;gap:12px}
+  .tracker>.section-top h2{font-size:22px}
+  .tracker>.section-top .button{min-height:44px;padding:10px 14px;font-size:13px;white-space:nowrap}
+  .week-toolbar{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;margin-bottom:14px}
+  .week-choice,.week-choice label{width:100%;min-width:0}
+  #week-select{min-height:50px;font-size:14px;padding-left:14px;padding-right:44px;border-radius:10px}
+  .week-tools{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;width:100%;margin:0}
+  .week-tools .button{min-height:44px;padding:8px 4px;font-size:12px;white-space:nowrap;border:1px solid var(--border);background:var(--panel)}
+  .week-tools .button:hover{background:var(--teal-soft)}
+  .week-tools .destructive:disabled{opacity:1;color:var(--muted);background:var(--stripe)}
+}
