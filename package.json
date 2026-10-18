@@ -18,7 +18,8 @@
     "test:payments": "node tests/payments-browser.mjs",
     "assets": "node scripts/generate-assets.mjs",
     "build": "node scripts/check.mjs && node scripts/build-worker.mjs",
-    "test:history": "node tests/history-browser.mjs"
+    "test:history": "node tests/history-browser.mjs",
+    "test:language": "node tests/language-browser.mjs"
   },
   "engines": {
     "node": ">=22.13"

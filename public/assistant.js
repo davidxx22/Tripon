@@ -1,3 +1,4 @@
+import {understandAssistant} from './assistant-language.js';
 import {amount,MAX_CENTS,addDays,localDate,uid,validDate,paymentMethod,setPaymentMethod,mergePaymentMethods,PAYMENT_METHODS,recordPayment} from './core.js';
 
 export function assistantDate(text){
@@ -38,7 +39,8 @@ function checkedNewPeople(trip,names){
   for(const name of names){const key=name.toLocaleLowerCase();if(seen.has(key))throw new Error(`${name} already exists or is listed twice. List each new person only once.`);seen.add(key);}
   return names;
 }
-export function parseAssistantCommand(text,trip){
+export function parseAssistantCommand(text,trip){return understandAssistant(text,trip,parseExactAssistantCommand);}
+function parseExactAssistantCommand(text,trip){
   let input=String(text).trim().replace(/[.!?]$/,'').replace(/\s+/g,' ');
   if(!input||input.length>500)throw new Error('Enter a command with up to 500 characters.');
   const add=input.match(/^add\s+(?:a\s+)?person\s+(.+)$/i);

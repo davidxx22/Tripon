@@ -182,3 +182,17 @@ Tap a person’s row in People to see total, Cash, GCash, unspecified, and any a
 ## Compact mobile controls
 
 Tap the recorded total on Home for the trip’s Total, Cash, GCash and unspecified/mixed breakdown; the separate GCash summary has been removed. People cards include side padding around the avatar and chevron. History date and method filters share a row with a 12px gap and retain 16px input text to avoid automatic iPhone zoom. The resting app uses CSS dynamic viewport units; reduced visual-viewport dimensions are used only while editing with a keyboard/picker open. Select changes dismiss picker focus, and dialog closing restores normal viewport sizing even when Safari reports a stale reduced height. Newly added trips continue to start with no people in either Transactions or People.
+
+## Flexible offline wording
+
+The assistant accepts polite requests, common contribution wording (gave, sent, paid, has given), week/day abbreviations, minor keyword typos, and unique near-matches to saved names. Name/keyword spelling corrections are shown in the preview. Ambiguous or unknown names require clarification; new names are not autocorrected. Amounts and dates are never guessed from misspelled numbers.
+
+Examples:
+- “Daneil gvae 30 today, give 10 each from day 1 to day 3 in wek 1” (when Daniel exists).
+- “Please record David sent 50 this week gcash”.
+- “Daniel paid 30 for days 1 to 3 in week 1”.
+- “How much has Daniel paid so far?”
+
+For “Daniel gave 50 today, give 10 each from day 1 to day 3 in week 1”, the assistant asks about the unallocated ₱20. Choose to spread the remainder across the other days, split the full ₱50 across Days 1–3, or correct the payment total to ₱30. Every choice leads to a new preview and final confirmation; existing records still require Add or Replace. Without an allocation, “today” uses the actual calendar date and requires a matching saved week. “Today” with an explicit week/day allocation refers to the payment time while the specified table days receive the allocation. Unsupported or contradictory wording remains a clarification/error with no changes. This remains a bounded offline parser, with no online model or API key.
+
+Run `npm run test:language` for typo previews, the exact day-range example, remainder clarification, cancellation, ambiguous names, offline persistence and group syncing.
