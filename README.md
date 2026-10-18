@@ -2,7 +2,26 @@
 
 A clean group travel savings tracker. Initial destination: **Samal**. No accounts or login required.
 
-**Live app:** https://tripon-travel-savings.stonykiwi.chatgpt.site
+**Live app:** https://tripon-david.vercel.app
+
+## Offline assistant and person totals
+
+Open **Tripon assistant** and enter one simple command at a time:
+
+- `David contributed 50 pesos this week` splits a weekly total across the five days.
+- `David give 50 pesos for this week, distribute them 10 each day this week` checks that the daily amounts equal the weekly total.
+- `Vince 10 each day week 2` fills five daily amounts in an existing week.
+- `Kian 25 on day 3` fills a single day in the selected week.
+- `Add person Azel` adds a person with no contributions.
+- `Add next week` creates five days after the latest saved week's end, then selects it.
+- `How much does Azel payment total?` shows all-time, selected-week, and current-month records.
+- `Show Azel total week 2` or `Show Azel total month 2026-10` asks about a specific period.
+
+The assistant is a deterministic offline command parser, not an online AI service. It works only within the selected trip. Names must match existing full names for contributions and queries; duplicate names need renaming. Unsupported wording shows guidance without making changes. Every mutation requires a preview and **Confirm & save**. Existing daily records require an explicit **Add** or **Replace** choice; untouched days are preserved. Splits use exact centavos, assigning any remainder to the earliest days. Queries never change records. Confirmed edits use the same persistence, sync queue, and conflict review as manual edits. Messages themselves are not stored or sent to an AI service.
+
+In **People totals**, choose **All time**, **Selected week**, or **Month** and pick a month. Monthly totals sum each daily entry by its actual date, including weeks crossing month/year boundaries. “This week” in a command means the selected week; “this month” means the current calendar month on the device. These are recorded contributions, not verified payments.
+
+Run `npm run test:assistant` against the local server (or set `TRIPON_TEST_URL` to a deployment). It checks preview/cancel, add/replace, person/week creation, period queries, month boundaries, offline persistence, mobile themes, and syncing between independent profiles.
 
 ## Multiple trips
 

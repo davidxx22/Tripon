@@ -1,5 +1,6 @@
 import {workspaceFrom,newWorkspace,currentTrip,removeTrip} from './trips.js';
 import {GroupSync,inviteFromHash} from './sync.js';
+import {parseAssistantCommand,previewContribution,applyContributionPreview,applyAssistantAction,personPeriodTotal} from './assistant.js';
 import {STORAGE_KEY, amount, money, newTracker, blankWeek, addDays, dateLabel, localDate, personWeek, personTotal, weekTotal, tripTotal, progress, uid, deletePerson, deleteWeek, validateData} from './core.js';
 const $ = id => document.getElementById(id);
 const escape = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -28,6 +29,7 @@ function save() {
 function commit(message) { render(); const ok=save(); if(message)notify(ok?message:message+' Edits are not saved—export a backup.'); }
 function render() {
   const hasTrips=workspace.trips.length>0;
+  $('assistant-open').hidden=!hasTrips;
   $('trip-select').disabled=!hasTrips;$('edit-trip').hidden=!hasTrips;$('no-trips').hidden=hasTrips;for(const selector of ['.savings-panel','.tracker','.lower-grid'])document.querySelector(selector).hidden=!hasTrips;
   $('trip-select').innerHTML=workspace.trips.map(t=>`<option value="${escape(t.id)}" ${t.id===workspace.selectedTripId?'selected':''}>${escape(t.id===workspace.selectedTripId?data.destination:t.destination)}${(t.id===workspace.selectedTripId?data.demo:t.demo)?' · sample':''}</option>`).join('')||'<option>No trips yet</option>';
   applyTheme(); const w=currentWeek(), i=data.weeks.findIndex(x=>x.id===w.id), p=progress(data);
@@ -46,7 +48,11 @@ $('delete-week').disabled=data.weeks.length===1;
   $('table-head').innerHTML=`<tr><th scope="col">Name</th>${Array.from({length:5},(_,n)=>`<th scope="col">Day ${n+1}<span>${dateLabel(addDays(w.start,n))}</span></th>`).join('')}<th scope="col">Weekly total</th></tr>`;
   $('table-body').innerHTML=data.people.map(person=>`<tr><th scope="row"><button class="name-button" data-person="${person.id}" aria-label="Manage ${escape(person.name)}"><span class="avatar" aria-hidden="true">${escape(person.name[0].toUpperCase())}</span><span class="person-name">${escape(person.name)}</span></button></th>${Array.from({length:5},(_,n)=>{const value=w.entries[person.id]?.[n];return `<td><button class="amount-button ${value===undefined?'blank':''}" data-entry="${person.id}" data-day="${n}" aria-label="${escape(person.name)}, Day ${n+1}, ${dateLabel(addDays(w.start,n))}, ${escape(money(value||0))}${value===undefined?', not entered':''}">${value===undefined?'—':escape(money(value))}</button></td>`;}).join('')}<td>${escape(money(personWeek(w,person.id)))}</td></tr>`).join('')||'<tr><td colspan="7" class="empty-state">Add your first person to start saving together.</td></tr>';
   $('table-foot').innerHTML=`<tr><th scope="row">${data.demo?'Sample total':'Group total'}</th>${Array.from({length:5},(_,n)=>`<td>${money(data.people.reduce((sum,person)=>sum+(w.entries[person.id]?.[n]||0),0))}</td>`).join('')}<td>${money(weekTotal(data,w))}</td></tr>`;
-  $('people-totals').innerHTML=data.people.map(person=>`<div class="person-summary"><span class="avatar" aria-hidden="true">${escape(person.name[0].toUpperCase())}</span><div class="summary-name">${escape(person.name)}<small>${data.weeks.length} ${data.weeks.length===1?'week':'weeks'}${data.demo?' · sample data':''}</small></div><strong>${money(personTotal(data,person.id))}</strong></div>`).join('')||'<p class="empty-state">Your crew will appear here.</p>';
+  const period=$('totals-period').value,month=$('totals-month').value||localDate().slice(0,7);
+  $('totals-month-field').hidden=period!=='month';
+  const periodLabel=period==='week'?`Week ${i+1} · ${dateLabel(w.start)} – ${dateLabel(w.end,true)}`:period==='month'?`${month} · by contribution date`:'All weeks';
+  $('totals-period-label').textContent=periodLabel;
+  $('people-totals').innerHTML=data.people.map(person=>`<div class="person-summary"><span class="avatar" aria-hidden="true">${escape(person.name[0].toUpperCase())}</span><div class="summary-name">${escape(person.name)}<small>${data.demo?'Sample contributions':'Recorded contributions'}</small></div><strong>${money(personPeriodTotal(data,person.id,period==='week'?{weekId:w.id}:period==='month'?{month}:{}))}</strong></div>`).join('')||'<p class="empty-state">Your crew will appear here.</p>';
 }
 function currentWeek(){return data.weeks.find(w=>w.id===data.selectedWeekId)||data.weeks[0];}
 const modal=$('modal');
@@ -71,6 +77,56 @@ function formDialog(title,copy,fields,onSubmit,extra=''){
 function confirmDialog(title,copy,action,label='Delete',danger=true){
   openDialog(title,copy,`<div class="form-actions"><button class="button" id="cancel-confirm">Cancel</button><button class="button ${danger?'destructive':'primary'}" id="do-confirm">${escape(label)}</button></div>`,()=>{$('cancel-confirm').onclick=close;$('do-confirm').onclick=()=>{action();};});
 }
+function contributionAssistant(initial=''){
+  const tripId=workspace.selectedTripId;
+  if(!tripId)return;
+  const selected=currentWeek(),index=data.weeks.findIndex(w=>w.id===selected.id)+1;
+  openDialog('Tripon assistant','Works offline using simple commands. Changes always need your confirmation.',`
+    <div class="assistant-context">${escape(data.destination)} · Selected week ${index}<br><span>${escape(dateLabel(selected.start,true))} – ${escape(dateLabel(selected.end,true))}${data.demo?' · SAMPLE DATA':''}</span></div>
+    <div class="assistant-message">Record contributions, add a person or next week, or ask for someone’s totals. “This week” means the selected week above; “this month” means the current calendar month. I only use this trip.</div>
+    <form id="assistant-form"><label class="field" for="assistant-command">Your message<textarea id="assistant-command" rows="3" maxlength="500" required placeholder="David contributed 50 pesos this week, split equally">${escape(initial)}</textarea></label>
+    <details class="assistant-examples"><summary>Example commands</summary><ul><li>David contributed 50 pesos this week</li><li>Vince 10 each day week 1</li><li>Kian 25 on day 3</li><li>Add person Azel</li><li>Add next week</li><li>How much does Azel payment total?</li><li>Show David total this week</li><li>Show David total month 2026-10</li></ul><p>Use a person’s full name. Weekly totals split across five days; extra centavos go to the earliest days. The next week starts after the latest saved week. Totals are records, not verified payments.</p></details>
+    <p id="assistant-error" class="form-error" role="alert"></p><div class="form-actions"><button type="button" id="assistant-cancel" class="button">Cancel</button><button type="submit" class="button primary">Preview changes</button></div></form>`,()=>{
+    $('assistant-command').focus();$('assistant-cancel').onclick=close;
+    $('assistant-form').onsubmit=e=>{e.preventDefault();try{if(workspace.selectedTripId!==tripId)throw new Error('The selected trip changed. Close and reopen the assistant.');const text=$('assistant-command').value,command=parseAssistantCommand(text,data);if(command.type==='contribution')assistantPreview(text,command,tripId);else assistantActionPreview(text,command,tripId);}catch(error){$('assistant-error').textContent=error.message;}};
+  });
+}
+function assistantActionPreview(text,action,tripId){
+  const isQuery=action.type==='query',week=data.weeks.find(w=>w.id===(action.weekId||data.selectedWeekId)),month=action.month||localDate().slice(0,7);
+  let body;
+  if(isQuery){
+    body=`<div class="assistant-context"><strong>${escape(action.personName)} · ${escape(data.destination)}</strong>${data.demo?' · SAMPLE DATA':''}</div><div class="assistant-answer"><p>All-time total<strong>${money(personPeriodTotal(data,action.personId))}</strong></p><p>Week ${data.weeks.indexOf(week)+1} · ${escape(dateLabel(week.start))} – ${escape(dateLabel(week.end,true))}<strong>${money(personPeriodTotal(data,action.personId,{weekId:week.id}))}</strong></p><p>Month ${escape(month)}<strong>${money(personPeriodTotal(data,action.personId,{month}))}</strong></p></div><p class="small muted">Monthly totals use the date of each daily entry across all weeks. This answer does not change any records.</p>`;
+  }else{
+    body=`<div class="assistant-context"><strong>${escape(data.destination)}${data.demo?' · SAMPLE DATA':''}</strong></div><div class="assistant-message">${action.type==='person-add'?`Add <strong>${escape(action.name)}</strong> to this trip with no contributions. Existing people and amounts stay unchanged.`:`Create <strong>Week ${data.weeks.length+1}</strong>: ${escape(dateLabel(action.start,true))} – ${escape(dateLabel(action.end,true))}, with no contributions. Existing people are available in the new week. Other weeks stay unchanged.`}</div><p class="small muted">${sync?.state?'This change syncs to everyone in your group when online.':'This change saves on this device.'} Other trips stay unchanged.</p>`;
+  }
+  openDialog(isQuery?'Recorded contribution totals':'Preview changes','',`<p class="assistant-user">${escape(text)}</p>${body}<p id="assistant-error" class="form-error" role="alert"></p><div class="form-actions"><button id="assistant-back" class="button">${isQuery?'Ask another':'Edit message'}</button><button id="assistant-confirm" class="button primary">${isQuery?'Done':'Confirm &amp; save'}</button></div>`,()=>{
+    $('assistant-back').onclick=()=>contributionAssistant(isQuery?'':text);
+    $('assistant-confirm').onclick=()=>{if(isQuery){close();return;}try{if(workspace.selectedTripId!==tripId)throw new Error('The selected trip changed. Enter your command again.');applyAssistantAction(data,action);$('assistant-confirm').disabled=true;close();commit(action.type==='person-add'?'Person added.':'New week created.');}catch(error){$('assistant-error').textContent=error.message;$('assistant-confirm').disabled=true;}};
+  });
+}
+function assistantPreview(text,command,tripId){
+  const initial=previewContribution(data,command),weekIndex=data.weeks.findIndex(w=>w.id===command.weekId)+1;
+  openDialog('Preview contributions','Review every daily amount before saving.',`
+    <p class="assistant-user">${escape(text)}</p><div class="assistant-context"><strong>${escape(command.personName)} · ${escape(data.destination)}</strong><br>Week ${weekIndex} · ${escape(dateLabel(command.start,true))} – ${escape(dateLabel(command.end,true))}${data.demo?'<br><strong>Sample contributions only</strong>':''}</div>
+    ${initial.hasExisting?'<fieldset class="assistant-choice"><legend>This person already has records this week. How should I apply this?</legend><label><input type="radio" name="assistant-mode" value="add"> Add to existing amounts</label><label><input type="radio" name="assistant-mode" value="replace"> Replace the requested days</label></fieldset>':''}
+    <div id="assistant-preview" aria-live="polite"></div><p id="assistant-error" class="form-error" role="alert"></p>
+    <p class="small muted">${sync?.state?'Confirmed changes sync to your group. Offline changes queue until you reconnect.':'Confirmed changes save on this device.'} This records contributions; it does not move or verify money.</p>
+    <div class="form-actions"><button id="assistant-back" class="button">Edit message</button><button id="assistant-confirm" class="button primary" disabled>Confirm &amp; save</button></div>`,()=>{
+      let plan;
+      const update=()=>{try{
+        plan=previewContribution(data,command,document.querySelector('input[name="assistant-mode"]:checked')?.value);
+        $('assistant-error').textContent='';$('assistant-confirm').disabled=plan.needsChoice;
+        if(plan.needsChoice){$('assistant-preview').innerHTML='<p class="assistant-message">Choose Add or Replace to see the updated amounts. Your records have not changed.</p>';return;}
+        const beforeTotal=(plan.before||[]).reduce((a,b)=>a+b,0),afterTotal=plan.after.reduce((a,b)=>a+b,0);
+        $('assistant-preview').innerHTML=`<div class="assistant-preview-list"><div class="assistant-preview-head"><span>Day / date</span><span>Before</span><span>After</span></div>${plan.after.map((value,day)=>`<div class="assistant-preview-row ${command.days.includes(day)?'requested':''}"><span>Day ${day+1}<small>${escape(dateLabel(addDays(command.start,day)))}</small></span><span>${money(plan.before?.[day]||0)}</span><strong>${money(value)}</strong></div>`).join('')}</div><p class="assistant-total">${escape(command.personName)}’s weekly total <strong>${money(beforeTotal)} → ${money(afterTotal)}</strong></p><p class="small muted">${plan.mode==='add'?'Adding to':'Replacing'} ${command.days.length===5?'all five days':'Day '+(command.days[0]+1)}. Other people, weeks, and trips stay unchanged.</p>`;
+      }catch(error){plan=null;$('assistant-confirm').disabled=true;$('assistant-error').textContent=error.message;}};
+      document.querySelectorAll('input[name="assistant-mode"]').forEach(input=>input.onchange=update);
+      $('assistant-back').onclick=()=>contributionAssistant(text);
+      $('assistant-confirm').onclick=()=>{try{if(workspace.selectedTripId!==tripId)throw new Error('The selected trip changed. Preview your command again.');if(!plan||plan.needsChoice)return;applyContributionPreview(data,plan);$('assistant-confirm').disabled=true;close();commit(data.demo?'Sample contributions saved.':'Contributions saved.');}catch(error){$('assistant-error').textContent=error.message;$('assistant-confirm').disabled=true;}};
+      update();
+    });
+}
+$('assistant-open').onclick=()=>contributionAssistant();
 function welcome(){
   openDialog('Welcome to Tripon','',`<img class="welcome-mark" src="./assets/icon.svg" alt="Tripon travel savings icon"><p class="welcome-title">Track your trip savings.</p><p class="dialog-copy">Record daily contributions and share a tracker with your group. Start with David, Vince, Deniele, and Kian — you can edit everyone.</p><div class="welcome-buttons"><button id="start-empty" class="button primary">Start empty tracker →</button><button id="start-demo" class="button">Explore demo · ₱10 per day</button></div><p class="external-note">No accounts needed. Create a shared group or join one with an invite link.</p>`,()=>{
     $('start-empty').onclick=()=>{data=newTracker();close();commit('Your empty tracker is ready.');};
@@ -103,6 +159,9 @@ function installation(){const standalone=matchMedia('(display-mode: standalone)'
 $('edit-trip').onclick=tripSettings;
 $('theme').onchange=e=>{data.theme=e.target.checked?'dark':'light';applyTheme();save();};
 $('how-install').onclick=installation;
+$('totals-month').value=localDate().slice(0,7);
+$('totals-period').onchange=render;
+$('totals-month').onchange=()=>{if(!$('totals-month').value)$('totals-month').value=localDate().slice(0,7);render();};
 $('add-person').onclick=()=>personEditor();$('add-week').onclick=()=>weekEditor(true);$('edit-week').onclick=()=>weekEditor(false);
 $('table-body').onclick=e=>{const entry=e.target.closest('[data-entry]'),person=e.target.closest('[data-person]');if(entry)editContribution(entry.dataset.entry,Number(entry.dataset.day));else if(person)personEditor(person.dataset.person);};
 function selectWeek(id){data.selectedWeekId=id;commit();}
