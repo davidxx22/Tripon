@@ -3,6 +3,16 @@ import {newTracker,blankWeek,localDate,tripTotal} from '../public/core.js';
 import {parseAssistantCommand as parse,previewContribution,applyContributionPreview} from '../public/assistant.js';
 import {resolveAllocation} from '../public/assistant-language.js';
 const tracker=()=>{const t=newTracker();t.people.push({id:'daniel',name:'Daniel'});return t;};
+test('split the amount by 10 allocates the payment from Day 1 instead of all five days',()=>{
+ const t=tracker();t.weeks=[blankWeek('2026-09-28')];t.selectedWeekId=t.weeks[0].id;t.people.push({id:'marelyn',name:'Marelyn'});const before=JSON.stringify(t);
+ for(const text of ['Marelyn gave 20 today, split the amount by 10 in week 1','In week 1 Marelyn gave 20 today, split by 10','Marelyn paid 20, split it by 10 for week one','Marelyn gave 20 today, distribute the payment in increments of 10 in week 1 via GCash']){const c=parse(text,t);assert.equal(c.type,'contribution');assert.equal(c.personId,'marelyn');assert.deepEqual(c.days,[0,1]);assert.deepEqual(c.values,[1000,1000]);assert.equal(c.total,2000);assert.match(c.interpretation.join(' '),/start at Day 1/);}
+ assert.equal(JSON.stringify(t),before);
+ t.weeks[0].entries.marelyn=[100,200,300,400,500];const c=parse('Marelyn gave 20 today, split the amount by 10 in week 1',t);assert.equal(previewContribution(t,c).needsChoice,true);applyContributionPreview(t,previewContribution(t,c,'replace'));assert.deepEqual(t.weeks[0].entries.marelyn,[1000,1000,300,400,500]);
+});
+test('chunk allocation preserves centavos and remainders and never spills into another week',()=>{
+ const t=tracker();for(const [total,chunk,expected] of [['25','10',[1000,1000,500]],['0.05','0.02',[2,2,1]],['5','10',[500]],['0','10',[0]]])assert.deepEqual(parse(`Daniel gave ${total} today, split by ${chunk} in week 1`,t).values,expected);
+ for(const text of ['Daniel gave 60 today, split by 10 in week 1','Daniel gave 20 today, split by 0 in week 1','Daniel gave 20 today, split by 10 in week 99','Daniel gave -20 today, split by 10 in week 1','Daniel gave 20 today, split by -10 in week 1','Daniel gave 20 today, split by 1.234 in week 1'])assert.throws(()=>parse(text,t),text);
+});
 test('offline understanding tolerates phrasing, polite requests, keyword and person typos',()=>{
  const t=tracker(),before=JSON.stringify(t);
  for(const text of ['Please record David sent 50 this week gcash','David has given 50 for wk1 using gcash','David contributed 50 thsi week via gcahs','David gave 50 today, give 10 each this week via GCash']){const c=parse(text,t);assert.equal(c.type,'contribution');assert.equal(c.method,'gcash');assert.equal(c.total,5000);}

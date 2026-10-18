@@ -1,4 +1,4 @@
-import {amount,addDays,localDate,MAX_CENTS} from './core.js';
+import {amount,money,addDays,localDate,MAX_CENTS} from './core.js';
 
 // Bounded offline interpretation. Never correct a number or silently choose a
 // person when more than one saved name is a plausible match.
@@ -47,6 +47,7 @@ function normalize(text,trip){
   });
   input=input.replace(/\b(week|day|days)\s+(one|two|three|four|five)\b/gi,(_,label,value)=>label+' '+numberWords[value.toLowerCase()]);
   input=input.replace(/\b(to|through|until)\s+(one|two|three|four|five)\b/gi,(_,label,value)=>label+' '+numberWords[value.toLowerCase()]);
+  input=input.replace(/^(?:in\s+|for\s+)?(week\s+\d+|this week|selected week)\s*[,,:]?\s+(.+)$/i,'$2 in $1');
   input=input.replace(/\b(?:has\s+given|just\s+gave)\b/gi,'gave').replace(/^record\s+(?:that\s+)?/i,'');
   input=input.replace(/\btoday[.,]\s*/gi,'today, ');
   input=input.replace(/\b(?:put|spread)\s+(?:it\s+)?/gi,'distribute ');
@@ -65,6 +66,24 @@ function normalize(text,trip){
   // A trailing bare method is clear; multiple methods still fail strict parsing.
   input=input.replace(/(?<!\bvia |\bin |\bby )\b(gcash|cash)$/i,'via $1').replace(/\b(using|via|in|by)\s+via\s+/gi,'$1 ');
   return {input,notes:[...new Set(notes)]};
+}
+function installmentCommand(input,trip){
+  const person=trip.people.filter(p=>input.toLowerCase().startsWith(p.name.toLowerCase()+' ')).sort((a,b)=>b.name.length-a.name.length)[0];
+  if(!person)return null;
+  let body=input.slice(person.name.length).trim(),method;
+  const methods=[...body.matchAll(/\b(?:via|in|using|by)\s+(cash|gcash)\b/gi)];
+  if(methods.length>1)throw new Error('Use one payment method per command: Cash or GCash.');
+  if(methods.length){method=methods[0][1].toLowerCase();body=body.replace(methods[0][0],'').trim();}
+  const match=body.match(/^(?:(?:gave|give|paid|contributed|saved)\s+)?(?:₱\s*|PHP\s*)?(\d+(?:\.\d{1,2})?)(?:\s*(?:pesos?|PHP))?(?:\s+|,\s*)(?:today\s*[,.:]?\s*)?[, ]*(?:split|distribute)\s+(?:(?:the\s+)?(?:amount|payment|money|total)\s+|(?:it|them)\s+)?(?:by|in\s+(?:increments|chunks)\s+of)\s+(?:₱\s*|PHP\s*)?(\d+(?:\.\d{1,2})?)(?:\s*(?:pesos?|PHP))?(?:\s+(?:(?:in|for|across)\s+)?(week\s+\d+|this week|selected week))?$/i);
+  if(!match)return null;
+  const total=amount(match[1]),daily=amount(match[2]);
+  if(daily===0)throw new Error('The amount to split by must be greater than zero. Nothing has been saved.');
+  const count=Math.max(1,Math.ceil(total/daily));
+  if(count>5)throw new Error(`${money(total)} split by ${money(daily)} needs ${count} days. A week has only five days. Choose a larger daily amount or record the rest in another week. Nothing has been saved.`);
+  const number=match[3]?.match(/week\s+(\d+)/i),week=number?trip.weeks[Number(number[1])-1]:trip.weeks.find(w=>w.id===trip.selectedWeekId);
+  if(!week)throw new Error('That week does not exist. Create it first.');
+  const days=Array.from({length:count},(_,i)=>i),values=days.map(day=>Math.min(daily,total-day*daily));
+  return {type:'contribution',personId:person.id,personName:person.name,weekId:week.id,start:week.start,end:week.end,days,values,total,split:count>1,method,interpretation:[`“Split by ${money(daily)}” means start at Day 1 of Week ${trip.weeks.indexOf(week)+1}: ${values.map((value,day)=>`Day ${day+1} ${money(value)}`).join(', ')}. Other days stay unchanged.`]};
 }
 function rangeCommand(input,trip){
   const people=trip.people.filter(p=>input.toLowerCase().startsWith(p.name.toLowerCase()+' ')).sort((a,b)=>b.name.length-a.name.length);
@@ -108,7 +127,7 @@ export function understandAssistant(text,trip,parseExact){
   let original;
   try{return parseExact(raw,trip);}catch(error){original=error;}
   const {input,notes}=normalize(raw,trip);
-  let result=rangeCommand(input,trip);
+  let result=installmentCommand(input,trip)||rangeCommand(input,trip);
   if(!result){
     // Without an explicit allocation, “today” refers to the actual calendar day.
     let canonical=input.replace(/\btoday$/i,'on '+localDate());
@@ -120,5 +139,5 @@ export function understandAssistant(text,trip,parseExact){
     canonical+=methodSuffix;
     try{result=parseExact(canonical,trip);}catch(error){if(input===raw.trim())throw original;throw error;}
   }
-  return {...result,interpretation:notes};
+  return {...result,interpretation:[...notes,...(result.interpretation||[])]};
 }
