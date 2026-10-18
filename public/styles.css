@@ -106,3 +106,14 @@ button.person-summary{width:100%;text-align:left;background:var(--panel);color:v
 button.person-summary:hover{border-color:var(--teal);background:var(--teal-soft)}.breakdown-chevron{font-size:24px;color:var(--muted);margin-left:4px}
 .payment-breakdown{display:grid;gap:10px;margin:20px 0}.payment-breakdown>p{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px;border:1px solid var(--border);border-radius:10px}.payment-breakdown>p:first-child{background:var(--teal-soft)}.payment-breakdown>small{color:var(--muted)}.gcash-breakdown strong{color:#1565c0}html[data-theme=dark] .gcash-breakdown strong{color:#83b9ff}
 body:not([data-page=home]) .trip-switcher{display:none}
+/* Resting layout uses CSS viewport sizing, never a cached native-picker height. */
+.app-shell{top:0;height:100%;height:100dvh}
+body.keyboard-open .app-shell{top:var(--app-offset,0px);height:var(--app-height,100dvh)}
+.app-shell>.app-dock{padding-bottom:env(safe-area-inset-bottom,0px)}
+button.person-summary{padding:14px 16px;gap:12px}
+button.person-summary .avatar{flex-shrink:0}
+button.person-summary .breakdown-chevron{flex-shrink:0;margin:0 0 0 4px}
+#trip-total-open{display:flex;flex-direction:column;align-items:flex-start;max-width:100%;padding:0;border:0;border-radius:6px;background:transparent;text-align:left;color:var(--text);cursor:pointer}
+#trip-total-open .big-money{display:block;overflow-wrap:anywhere}
+.total-details-hint{font-size:12px;line-height:1.5;color:var(--teal);margin:2px 0 10px}
+@media(max-width:600px){.history-filters{grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:12px;align-items:start}.history-filters>.field:first-child{grid-column:1/-1}.history-filters>.field{min-width:0;overflow:visible}.history-filters input,.history-filters select{width:100%;min-width:0;padding:10px 8px;min-height:48px;font-size:16px}.history-filters .field{font-size:12px}.history-filters>button{grid-column:1/-1}.history-filters select{padding-right:24px}button.person-summary{padding:14px 12px;gap:10px}}

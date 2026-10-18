@@ -3,7 +3,7 @@ import {workspaceFrom,newWorkspace,currentTrip,removeTrip} from './trips.js';
 import {GroupSync,inviteFromHash} from './sync.js';
 import {PROFILE_KEY,validateProfile,profileInitials,prepareProfilePhoto} from './profile.js';
 import {parseAssistantCommand,previewContribution,applyContributionPreview,applyAssistantAction,personPeriodTotal,previewBatch,applyBatchPreview} from './assistant.js';
-import {STORAGE_KEY, amount, money, newTracker, blankWeek, addDays, dateLabel, localDate, personWeek, personTotal, weekTotal, tripTotal, gcashTotal, paymentBreakdown, progress, uid, deletePerson, deleteWeek, validateData,paymentMethod,paymentLabel,setPaymentMethod,localDateTime,parsePaymentTime,paymentRecords,recordPayment} from './core.js';
+import {STORAGE_KEY, amount, money, newTracker, blankWeek, addDays, dateLabel, localDate, personWeek, personTotal, weekTotal, tripTotal, paymentBreakdown, progress, uid, deletePerson, deleteWeek, validateData,paymentMethod,paymentLabel,setPaymentMethod,localDateTime,parsePaymentTime,paymentRecords,recordPayment} from './core.js';
 const $ = id => document.getElementById(id);
 const escape = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function paymentOptions(selected='unspecified',keep=false){const options=[...(keep?['keep']:[]),'unspecified','cash','gcash'];if(selected&&!options.includes(selected))options.push(selected);return options.map(value=>`<option value="${value}" ${selected===value?'selected':''}>${escape(value==='keep'?'Keep existing labels':paymentLabel(value))}</option>`).join('');}
@@ -37,10 +37,14 @@ function profileEditor(){
 let sync, workspace;
 let activePage='home';
 let viewportFrame;
-function sizeApp(){cancelAnimationFrame(viewportFrame);viewportFrame=requestAnimationFrame(()=>{const viewport=window.visualViewport;if(viewport&&viewport.scale!==1)return;const keyboard=!!document.activeElement?.matches('input,textarea,select')&&(window.innerHeight-(viewport?.height||window.innerHeight)>120);document.body.classList.toggle('keyboard-open',keyboard);document.documentElement.style.setProperty('--app-height',Math.round(viewport?.height||window.innerHeight)+'px');document.documentElement.style.setProperty('--app-offset',Math.round(viewport?.offsetTop||0)+'px');});}
-sizeApp();window.addEventListener('resize',sizeApp);window.addEventListener('pageshow',sizeApp);window.visualViewport?.addEventListener('resize',sizeApp);window.visualViewport?.addEventListener('scroll',sizeApp);
-document.addEventListener('focusin',()=>{sizeApp();if(document.activeElement?.matches('input,textarea,select'))setTimeout(()=>{sizeApp();document.activeElement?.scrollIntoView({block:'nearest',behavior:'instant'});},300);});
-document.addEventListener('focusout',()=>{sizeApp();setTimeout(sizeApp,100);setTimeout(sizeApp,400);});
+function sizeApp(){cancelAnimationFrame(viewportFrame);viewportFrame=requestAnimationFrame(()=>{const viewport=window.visualViewport,editing=!!document.activeElement?.matches('input,textarea,select'),keyboard=editing&&(!viewport||viewport.scale===1)&&(window.innerHeight-(viewport?.height||window.innerHeight)>120);document.body.classList.toggle('keyboard-open',keyboard);if(keyboard){document.documentElement.style.setProperty('--app-height',Math.round(viewport.height)+'px');document.documentElement.style.setProperty('--app-offset',Math.round(viewport.offsetTop||0)+'px');}else{document.documentElement.style.removeProperty('--app-height');document.documentElement.style.removeProperty('--app-offset');}});}
+function restoreViewport(){sizeApp();setTimeout(sizeApp,100);setTimeout(sizeApp,400);setTimeout(sizeApp,800);}
+sizeApp();window.addEventListener('resize',sizeApp);window.addEventListener('pageshow',restoreViewport);window.visualViewport?.addEventListener('resize',sizeApp);window.visualViewport?.addEventListener('scroll',sizeApp);
+document.addEventListener('focusin',()=>{sizeApp();if(document.activeElement?.matches('input,textarea'))setTimeout(()=>{sizeApp();if(document.activeElement?.matches('input,textarea'))document.activeElement.scrollIntoView({block:'nearest',behavior:'instant'});},300);});
+document.addEventListener('focusout',restoreViewport);
+// Native pickers can leave visualViewport dimensions stale after selection on iOS.
+// Dismiss the picker focus and let CSS dynamic viewport units size the resting app.
+document.addEventListener('change',event=>{if(event.target.matches('select')){event.target.blur();restoreViewport();}});
 function applyView(){
   document.body.dataset.page=activePage;
   document.querySelectorAll('[data-page-panel]').forEach(panel=>{panel.hidden=panel.dataset.pagePanel!==activePage||(panel.hasAttribute('data-needs-trip')&&!workspace.trips.length);});
@@ -79,7 +83,7 @@ function render() {
   $('trip-heading').textContent=hasTrips?data.destination:'No trips yet';document.querySelector('.intro-copy').textContent=hasTrips?'Group travel savings':'Add a trip to start recording contributions.';document.title=hasTrips?`Tripon · ${data.destination}`:'Tripon';
   $('demo-banner').hidden=!hasTrips||!data.demo;
   $('recorded-label').textContent=data.demo?'SAMPLE CONTRIBUTIONS · DEMO ONLY':'RECORDED CONTRIBUTIONS';
-  $('trip-total').textContent=money(p.total);const gcash=gcashTotal(data);$('gcash-total').textContent=money(gcash.total);$('gcash-label').textContent=data.demo?'SAMPLE VIA GCASH':'RECORDED VIA GCASH';$('gcash-mixed').hidden=!gcash.mixed;$('gcash-mixed').textContent=money(gcash.mixed)+' has mixed payment labels; its GCash portion is unknown and excluded here.';
+  $('trip-total').textContent=money(p.total);
   $('savings-caption').textContent=data.demo?'A preview of how your tracker works. No actual savings recorded.':'Total across all weeks.';
   $('savings-progress').hidden=!data.goalCents;
   $('progress-copy').textContent=data.demo?'Sample progress only':p.remaining?`${money(p.remaining)} remaining`:'Goal reached';
@@ -101,7 +105,7 @@ $('delete-week').disabled=data.weeks.length===1;
 function currentWeek(){return data.weeks.find(w=>w.id===data.selectedWeekId)||data.weeks[0];}
 const modal=$('modal');
 let dialogOpener;
-function resumeAfterDialog(){queueMicrotask(()=>{if(!modal.open){const target=dialogOpener?.isConnected&&dialogOpener.getClientRects().length&&!dialogOpener.closest('dialog')&&!dialogOpener.matches('.skip')?dialogOpener:$('main');target.focus({preventScroll:true});if(sync){sync.paused=false;void sync.flush();}}});}
+function resumeAfterDialog(){queueMicrotask(()=>{if(!modal.open){const target=dialogOpener?.isConnected&&dialogOpener.getClientRects().length&&!dialogOpener.closest('dialog')&&!dialogOpener.matches('.skip')?dialogOpener:$('main');target.focus({preventScroll:true});restoreViewport();if(sync){sync.paused=false;void sync.flush();}}});}
 function close(){modal.close();resumeAfterDialog();}
 modal.addEventListener('cancel',resumeAfterDialog);
 function openDialog(title,copy,body,setup){
@@ -245,7 +249,11 @@ $('history-clear').onclick=()=>{$('history-search').value='';$('history-date').v
 $('history-more').onclick=()=>{historyLimit+=60;renderHistory();};
 $('history-list').onclick=event=>{const button=event.target.closest('[data-history-key]');if(!button)return;const row=contributionHistory(data).find(row=>row.key===button.dataset.historyKey);if(!row)return;const tripId=workspace.selectedTripId;formDialog(row.name+' · '+money(row.amount),'Edit when this payment was given. Its daily allocations and the savings total stay the same.',`<label class="field">Payment date and time<input name="paidAt" type="datetime-local" value="${localDateTime(row.at)}" min="1900-01-01T00:00" max="9998-12-31T23:59"><small>Local time. Leave blank if unknown.</small></label><label class="field">Payment method<select name="method">${paymentOptions(row.method)}</select></label><p class="small muted">Allocated to: ${row.parts.map(part=>escape(part.allocationDate)+' · '+money(part.amount)).join(', ')}</p>`,f=>{if(workspace.selectedTripId!==tripId)throw new Error('The trip changed. Reopen this payment.');editHistoryPayment(data,row,parsePaymentTime(f.get('paidAt')),f.get('method'));close();commit('Payment details updated.');});};
 
-$('people-totals').onclick=event=>{const button=event.target.closest('[data-breakdown]');if(!button)return;const person=data.people.find(person=>person.id===button.dataset.breakdown);if(!person)return;const period=$('totals-period').value,month=$('totals-month').value||localDate().slice(0,7),totals=paymentBreakdown(data,{personId:person.id,...(period==='week'?{weekId:currentWeek().id}:period==='month'?{month}:{})});openDialog(person.name+' · Payment breakdown',$('totals-period-label').textContent+(data.demo?' · SAMPLE DATA':''),`<div class="payment-breakdown"><p><span>Total contributions</span><strong>${money(totals.total)}</strong></p><p><span>Cash</span><strong>${money(totals.cash)}</strong></p><p class="gcash-breakdown"><span>GCash</span><strong>${money(totals.gcash)}</strong></p><p><span>Not specified</span><strong>${money(totals.unspecified)}</strong></p>${totals.mixed?'<p><span>Mixed labels</span><strong>'+money(totals.mixed)+'</strong></p><small>These older records do not specify how much was Cash or GCash. They are included in the total, but excluded from the exact Cash and GCash amounts.</small>':''}</div><p class="small muted">${period==='month'?'Month totals follow the dates allocated in the weekly table.':'Based on the selected period’s saved records.'}</p><div class="form-actions"><button id="close-breakdown" class="button primary">Done</button></div>`,()=>{$('close-breakdown').onclick=close;});};
+function showPaymentBreakdown(title,copy,totals,note='Across all weeks in this trip.'){
+ openDialog(title,copy,`<div class="payment-breakdown"><p><span>Total contributions</span><strong>${money(totals.total)}</strong></p><p><span>Cash</span><strong>${money(totals.cash)}</strong></p><p class="gcash-breakdown"><span>GCash</span><strong>${money(totals.gcash)}</strong></p><p><span>Not specified</span><strong>${money(totals.unspecified)}</strong></p>${totals.mixed?'<p><span>Mixed labels</span><strong>'+money(totals.mixed)+'</strong></p><small>These records do not specify how much was Cash or GCash. They are included in the total, but excluded from the exact Cash and GCash amounts.</small>':''}</div><p class="small muted">${escape(note)}</p><div class="form-actions"><button id="close-breakdown" class="button primary">Done</button></div>`,()=>{$('close-breakdown').onclick=close;});
+}
+$('trip-total-open').onclick=()=>showPaymentBreakdown('Trip payment breakdown',data.destination+(data.demo?' · SAMPLE DATA':''),paymentBreakdown(data));
+$('people-totals').onclick=event=>{const button=event.target.closest('[data-breakdown]');if(!button)return;const person=data.people.find(person=>person.id===button.dataset.breakdown);if(!person)return;const period=$('totals-period').value,month=$('totals-month').value||localDate().slice(0,7),totals=paymentBreakdown(data,{personId:person.id,...(period==='week'?{weekId:currentWeek().id}:period==='month'?{month}:{})});showPaymentBreakdown(person.name+' · Payment breakdown',$('totals-period-label').textContent+(data.demo?' · SAMPLE DATA':''),totals,period==='month'?'Month totals follow the dates allocated in the weekly table.':'Based on the selected period’s saved records.');};
 $('totals-period').onchange=render;
 $('totals-month').onchange=()=>{if(!$('totals-month').value)$('totals-month').value=localDate().slice(0,7);render();};
 $('add-person').onclick=()=>personEditor();$('add-week').onclick=()=>weekEditor(true);$('edit-week').onclick=()=>weekEditor(false);
