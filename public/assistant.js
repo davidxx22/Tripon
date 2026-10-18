@@ -1,4 +1,4 @@
-import {amount,MAX_CENTS,addDays,localDate,uid,validDate,paymentMethod,setPaymentMethod,mergePaymentMethods,PAYMENT_METHODS} from './core.js';
+import {amount,MAX_CENTS,addDays,localDate,uid,validDate,paymentMethod,setPaymentMethod,mergePaymentMethods,PAYMENT_METHODS,recordPayment} from './core.js';
 
 export function assistantDate(text){
   const value=text.trim().toLowerCase();let result=value;
@@ -153,18 +153,19 @@ export function previewBatch(trip,batch,mode,allocation){
   const plans=commands.map(c=>previewContribution(trip,c,mode));
   return {needsChoice:plans.some(p=>p.needsChoice),plans,allocation,total:commands.reduce((sum,c)=>sum+c.total,0)};
 }
-export function applyBatchPreview(trip,batchPlan){
+export function applyBatchPreview(trip,batchPlan,at=new Date().toISOString()){
   if(batchPlan.needsChoice||!batchPlan.plans)throw new Error('Choose the amount allocation and preview all changes first.');
   const copy=structuredClone(trip);
-  for(const plan of batchPlan.plans)applyContributionPreview(copy,plan);
+  for(const plan of batchPlan.plans)applyContributionPreview(copy,plan,at);
   // Validate the whole operation before changing a single person’s actual records.
-  for(const plan of batchPlan.plans){const week=trip.weeks.find(w=>w.id===plan.command.weekId);week.entries[plan.command.personId]=[...plan.after];for(const day of plan.command.days)setPaymentMethod(week,plan.command.personId,day,plan.afterMethods[day]);}
+  trip.weeks=copy.weeks;
 }
 
 export function previewContribution(trip,command,mode){
   const week=trip.weeks.find(w=>w.id===command.weekId),person=trip.people.find(p=>p.id===command.personId);
   if(!week||!person||person.name!==command.personName||week.start!==command.start||week.end!==command.end)throw new Error('The person or week changed. Enter your command again.');
   const before=week.entries[person.id]?[...week.entries[person.id]]:null;
+  const beforePayments=JSON.stringify(week.payments?.[person.id]??null);
   const beforeMethods=[0,1,2,3,4].map(day=>paymentMethod(week,person.id,day));
   if(command.method!==undefined&&!PAYMENT_METHODS.includes(command.method))throw new Error('Choose a valid payment method.');
   const hasExisting=before!==null;
@@ -174,15 +175,18 @@ export function previewContribution(trip,command,mode){
   const afterMethods=[...beforeMethods];
   command.days.forEach((day,i)=>{after[day]=command.values[i]+(mode==='add'?after[day]:0);if(!Number.isSafeInteger(after[day])||after[day]>MAX_CENTS)throw new Error('A daily amount would exceed ₱9,999,999.99.');});
   if(command.method!==undefined)command.days.forEach((day,i)=>{afterMethods[day]=mode==='add'&&before?.[day]>0?(command.values[i]>0?mergePaymentMethods(beforeMethods[day],command.method):beforeMethods[day]):command.method;});
-  return {hasExisting,needsChoice:false,before,after,beforeMethods,afterMethods,command,mode:mode||'replace'};
+  return {hasExisting,needsChoice:false,before,after,beforePayments,beforeMethods,afterMethods,command,mode:mode||'replace'};
 }
 
-export function applyContributionPreview(trip,plan){
+export function applyContributionPreview(trip,plan,at=new Date().toISOString()){
   if(plan.needsChoice||!plan.command)throw new Error('Preview the changes and choose how to handle existing records first.');
   const fresh=previewContribution(trip,plan.command,plan.mode);
   if(JSON.stringify(fresh.before)!==JSON.stringify(plan.before))throw new Error('These contributions changed after the preview. Preview your command again.');
   if(JSON.stringify(fresh.after)!==JSON.stringify(plan.after))throw new Error('The preview changed. Preview your command again.');
   if(JSON.stringify(fresh.beforeMethods)!==JSON.stringify(plan.beforeMethods)||JSON.stringify(fresh.afterMethods)!==JSON.stringify(plan.afterMethods))throw new Error('The payment labels changed after the preview. Preview your command again.');
-  trip.weeks.find(w=>w.id===plan.command.weekId).entries[plan.command.personId]=[...fresh.after];
+  if(fresh.beforePayments!==plan.beforePayments)throw new Error('Payment records changed after the preview. Preview again.');
+  const recordWeek=trip.weeks.find(w=>w.id===plan.command.weekId),id=uid(),copy=structuredClone(recordWeek);
+  plan.command.days.forEach((day,index)=>recordPayment(copy,plan.command.personId,day,{id,at,amount:plan.command.values[index],method:plan.command.method??fresh.afterMethods[day]},plan.mode));
+  recordWeek.payments=copy.payments;recordWeek.entries[plan.command.personId]=[...fresh.after];
   const week=trip.weeks.find(w=>w.id===plan.command.weekId);for(const day of plan.command.days)setPaymentMethod(week,plan.command.personId,day,fresh.afterMethods[day]);
 }

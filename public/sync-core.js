@@ -1,8 +1,8 @@
 import {workspaceFrom,LEGACY_TRIP} from './trips.js';
-import {validateData,paymentMethod,setPaymentMethod,deletePerson} from './core.js';
+import {validateData,paymentMethod,setPaymentMethod,setPaymentRecords,deletePerson} from './core.js';
 export const equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 export function shared(data){if(data.version===2){const w=workspaceFrom(data);w.theme='system';w.selectedTripId=w.trips[0]?.id??null;w.trips=w.trips.map(t=>({id:t.id,...shared(t)}));return w;}const d=structuredClone(data);d.theme='system';d.selectedWeekId=d.weeks[0].id;return validateData(d);}
-function personSnapshot(d,id){const person=d.people.find(p=>p.id===id);if(!person)return null;const entries={},methods={};for(const w of d.weeks){if(w.entries[id])entries[w.id]=w.entries[id];if(w.paymentMethods?.[id])methods[w.id]=w.paymentMethods[id];}return {person,entries,...(Object.keys(methods).length?{methods}:{})};}
+function personSnapshot(d,id){const person=d.people.find(p=>p.id===id);if(!person)return null;const entries={},methods={},payments={};for(const w of d.weeks){if(w.entries[id])entries[w.id]=w.entries[id];if(w.paymentMethods?.[id])methods[w.id]=w.paymentMethods[id];if(w.payments?.[id])payments[w.id]=w.payments[id];}return {person,entries,...(Object.keys(payments).length?{payments}:{}),...(Object.keys(methods).length?{methods}:{})};}
 function changesSingle(before,after){
   const ops=[];const push=(type,id,old,value,extra={})=>{if(!equal(old,value))ops.push({type,id,before:old,value,...extra});};
   for(const key of ['destination','goalCents','demo'])push('trip',key,before[key],after[key]);
@@ -11,7 +11,8 @@ function changesSingle(before,after){
     push('dates',w.id,{start:old.start,end:old.end},{start:w.start,end:w.end});
     for(const p of after.people)for(let day=0;day<5;day++){
       const a=paymentMethod(old,p.id,day),b=paymentMethod(w,p.id,day);
-      if(a!=='unspecified'||b!=='unspecified')push('contribution',w.id,{amount:old.entries[p.id]?.[day]||0,method:a},{amount:w.entries[p.id]?.[day]||0,method:b},{person:p.id,day});
+      if(old.payments?.[p.id]?.[day]!=null||w.payments?.[p.id]?.[day]!=null)push('payment',w.id,{amount:old.entries[p.id]?.[day]||0,method:a,records:old.payments?.[p.id]?.[day]??null},{amount:w.entries[p.id]?.[day]||0,method:b,records:w.payments?.[p.id]?.[day]??null},{person:p.id,day});
+      else if(a!=='unspecified'||b!=='unspecified')push('contribution',w.id,{amount:old.entries[p.id]?.[day]||0,method:a},{amount:w.entries[p.id]?.[day]||0,method:b},{person:p.id,day});
       else push('entry',w.id,old.entries[p.id]?.[day]||0,w.entries[p.id]?.[day]||0,{person:p.id,day});
     }
   }}
@@ -19,15 +20,15 @@ function changesSingle(before,after){
   for(const w of before.weeks)if(!after.weeks.some(x=>x.id===w.id))push('week-remove',w.id,w,null);
   return ops;
 }
-function read(d,o){const w=d.weeks.find(x=>x.id===o.id),p=d.people.find(x=>x.id===o.id);switch(o.type){case'trip':return d[o.id];case'person-add':return p||null;case'name':return p?.name??null;case'person-remove':return personSnapshot(d,o.id);case'week-add':case'week-remove':return w||null;case'dates':return w?{start:w.start,end:w.end}:null;case'contribution':return w&&d.people.some(x=>x.id===o.person)?{amount:w.entries[o.person]?.[o.day]||0,method:paymentMethod(w,o.person,o.day)}:null;case'entry':return w&&d.people.some(x=>x.id===o.person)?w.entries[o.person]?.[o.day]||0:null;default:throw new Error('Unsupported edit.');}}
+function read(d,o){const w=d.weeks.find(x=>x.id===o.id),p=d.people.find(x=>x.id===o.id);switch(o.type){case'trip':return d[o.id];case'person-add':return p||null;case'name':return p?.name??null;case'person-remove':return personSnapshot(d,o.id);case'week-add':case'week-remove':return w||null;case'dates':return w?{start:w.start,end:w.end}:null;case'payment':return w&&d.people.some(x=>x.id===o.person)?{amount:w.entries[o.person]?.[o.day]||0,method:paymentMethod(w,o.person,o.day),records:w.payments?.[o.person]?.[o.day]??null}:null;case'contribution':return w&&d.people.some(x=>x.id===o.person)?{amount:w.entries[o.person]?.[o.day]||0,method:paymentMethod(w,o.person,o.day)}:null;case'entry':return w&&d.people.some(x=>x.id===o.person)?w.entries[o.person]?.[o.day]||0:null;default:throw new Error('Unsupported edit.');}}
 export class SyncConflict extends Error{constructor(conflicts){super('The group changed the same records.');this.conflicts=conflicts;}}
 function applySingle(document,ops,force=false){
   if(!Array.isArray(ops)||!ops.length||ops.length>20000)throw new Error('Invalid edit batch.');
   const d=structuredClone(document),conflicts=[];
   for(const o of ops){
-    if(!o||typeof o.id!=='string'||!['trip','person-add','person-remove','name','week-add','week-remove','dates','entry','contribution'].includes(o.type))throw new Error('Invalid edit.');
+    if(!o||typeof o.id!=='string'||!['trip','person-add','person-remove','name','week-add','week-remove','dates','entry','contribution','payment'].includes(o.type))throw new Error('Invalid edit.');
     if(o.type==='trip'&&!['destination','goalCents','demo'].includes(o.id))throw new Error('Invalid trip field.');
-    if(['entry','contribution'].includes(o.type)&&(!Number.isInteger(o.day)||o.day<0||o.day>4||typeof o.person!=='string'))throw new Error('Invalid day.');
+    if(['entry','contribution','payment'].includes(o.type)&&(!Number.isInteger(o.day)||o.day<0||o.day>4||typeof o.person!=='string'))throw new Error('Invalid day.');
     const current=read(document,o);
     if(!force&&!equal(current,o.before)&&!equal(current,o.value)){conflicts.push({type:o.type,id:o.id,person:o.person,day:o.day,current,wanted:o.value});continue;}
     const w=d.weeks.find(x=>x.id===o.id),p=d.people.find(x=>x.id===o.id);
@@ -39,8 +40,9 @@ function applySingle(document,ops,force=false){
       case'week-add':if(!w)d.weeks.push(o.value);else if(!equal(w,o.value))throw new Error('Week ID already exists.');break;
       case'week-remove':d.weeks=d.weeks.filter(x=>x.id!==o.id);break;
       case'dates':if(!w)throw new Error('This week was removed.');w.start=o.value.start;w.end=o.value.end;break;
-      case'entry':if(!w||!d.people.some(x=>x.id===o.person))throw new Error('This person or week was removed. Export your pending edits before discarding them.');w.entries[o.person]||=Array(5).fill(0);w.entries[o.person][o.day]=o.value;break;
-      case'contribution':if(!w||!d.people.some(x=>x.id===o.person))throw new Error('This person or week was removed. Export your pending edits before discarding them.');if(!o.value||typeof o.value!=='object')throw new Error('Invalid contribution.');w.entries[o.person]||=Array(5).fill(0);w.entries[o.person][o.day]=o.value.amount;setPaymentMethod(w,o.person,o.day,o.value.method);break;
+      case'payment':if(!w||!d.people.some(x=>x.id===o.person))throw new Error('This person or week was removed.');if(!o.value||typeof o.value!=='object')throw new Error('Invalid payment.');w.entries[o.person]||=Array(5).fill(0);w.entries[o.person][o.day]=o.value.amount;setPaymentMethod(w,o.person,o.day,o.value.method);setPaymentRecords(w,o.person,o.day,o.value.records);break;
+      case'entry':if(!w||!d.people.some(x=>x.id===o.person))throw new Error('This person or week was removed. Export your pending edits before discarding them.');w.entries[o.person]||=Array(5).fill(0);w.entries[o.person][o.day]=o.value;if(w.payments?.[o.person])w.payments[o.person][o.day]=null;break;
+      case'contribution':if(!w||!d.people.some(x=>x.id===o.person))throw new Error('This person or week was removed. Export your pending edits before discarding them.');if(!o.value||typeof o.value!=='object')throw new Error('Invalid contribution.');w.entries[o.person]||=Array(5).fill(0);w.entries[o.person][o.day]=o.value.amount;setPaymentMethod(w,o.person,o.day,o.value.method);if(w.payments?.[o.person])w.payments[o.person][o.day]=null;break;
     }
   }
   if(conflicts.length)throw new SyncConflict(conflicts);

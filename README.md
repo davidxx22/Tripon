@@ -165,6 +165,16 @@ Vercel's Node.js function and project configuration references: https://vercel.c
 
 On a new empty trip, ask the assistant “Add David, Azel, and Kian”. Review the list and confirm to add everyone together with no amounts. Existing or repeated names are rejected without adding anyone.
 
-History groups positive daily entries by their assigned contribution date, with daily totals and Cash/GCash labels. Tap a card to edit its record. Search by name, pick a date, or filter payment methods; combined labels match each included method. History reflects current records, not an immutable audit log: edits and deletions update it, and actual payment times are not known. Weekly splits appear on each assigned day. Sample trips remain labeled as samples. No extra data migration is required.
+History groups positive daily entries by their assigned contribution date, with daily totals and Cash/GCash labels. Tap a card to edit its record. Search by name, pick a date, or filter payment methods; combined labels match each included method. History reflects current payment records, not an immutable audit log: edits and deletions update it. New payments carry a separately recorded payment time; weekly splits appear as one payment. Older records keep unknown payment times until corrected. Sample trips remain labeled as samples. No extra data migration is required.
 
 Run `npm run test:history` for bulk-add previews, duplicates, dated history/filtering, editing, backups, trip isolation, mobile themes/dock, group syncing and offline reload.
+
+## Payment times and GCash totals
+
+Contribution previews include a payment date/time, defaulting to now, which can be changed before confirmation. It represents when the money was given, as entered by the recorder, not a verified payment time. The UTC instant is stored and displayed in each phone’s local time. One split payment keeps the same ID across its daily allocations; additional payments retain separate IDs and timestamps. History groups these allocations into one payment card and supports time/method corrections. Table edits replace that day’s allocation records; deleting a person, week, or trip removes its allocations. Savings calculations still use daily entries exactly once. Legacy entries have no invented payment time.
+
+Home shows the exact amount labeled GCash across all weeks in the selected trip. Cash payments added to GCash cells retain separate amounts. Old mixed labels have an unknown GCash portion, shown separately and excluded from the exact GCash total. Backups and group sync include timestamped payment allocations. Unsupported old-client daily edits clear only that day’s timestamp metadata rather than retaining a misleading time.
+
+Mobile history filters stack at phone widths. Form controls use at least 16px text to prevent iOS automatic focus zoom; pinch zoom remains available. The shell follows visual viewport resize/offset changes, temporarily hides the navigation/chat dock while a keyboard reduces the viewport, and restores it when the keyboard closes. Tests simulate keyboard resize and pan; real iOS Safari keyboard/zoom behavior still needs a physical-phone check.
+
+Tap a person’s row in People to see total, Cash, GCash, unspecified, and any ambiguous mixed amounts for the selected All time, Selected week, or Month filter. Month breakdowns continue to use the daily allocation dates, as the People total does; History uses payment timestamps.

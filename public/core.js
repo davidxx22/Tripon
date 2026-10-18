@@ -5,6 +5,18 @@ export const PAYMENT_METHODS=['unspecified','cash','gcash','cash+gcash','cash+un
 export function paymentMethod(week,person,day){return week.paymentMethods?.[person]?.[day]||'unspecified';}
 export function paymentLabel(method){return method==='unspecified'?'Not specified':method.split('+').map(x=>x==='gcash'?'GCash':x==='cash'?'Cash':'Not specified').join(' + ');}
 export function mergePaymentMethods(before,after){const all=new Set([...before.split('+'),...after.split('+')]);return ['cash','gcash','unspecified'].filter(x=>all.has(x)).join('+');}
+export function validPaymentTime(value){return value===null||(typeof value==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)&&validDate(value.slice(0,10))&&Number.isFinite(Date.parse(value))&&new Date(value).toISOString()===value);}
+export function localDateTime(value=new Date().toISOString()){if(!value)return '';const d=new Date(value);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}T${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;}
+export function parsePaymentTime(value){if(!value)return null;if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)||!validDate(value.slice(0,10)))throw new Error('Choose a valid payment date and time.');const date=new Date(value);if(!Number.isFinite(date.valueOf())||localDateTime(date.toISOString())!==value)throw new Error('Choose a valid payment date and time.');return date.toISOString();}
+export function paymentRecords(week,person,day){const value=week.entries[person]?.[day]||0;return week.payments?.[person]?.[day]??(value?[{id:`legacy-${week.id}-${day}`,at:null,amount:value,method:paymentMethod(week,person,day)}]:[]);}
+export function setPaymentRecords(week,person,day,records){week.payments||={};week.payments[person]||=Array.from({length:5},()=>null);week.payments[person][day]=structuredClone(records);}
+export function recordPayment(week,person,day,record,mode='replace'){
+  if(!validPaymentTime(record.at))throw new Error('Choose a valid payment time.');
+  const records=mode==='add'?structuredClone(paymentRecords(week,person,day)):[];
+  if(record.amount>0)records.push({...record});
+  if(records.length>500)throw new Error('This daily entry has reached its limit of 500 payment records.');
+  setPaymentRecords(week,person,day,records);
+}
 export function setPaymentMethod(week,person,day,method){
   if(!PAYMENT_METHODS.includes(method))throw new Error('Choose Cash, GCash, or Not specified.');
   if(method==='unspecified'&&!week.paymentMethods?.[person])return;
@@ -37,8 +49,14 @@ export function personWeek(week, id) { return (week.entries[id] || []).reduce((s
 export function personTotal(data,id) { return data.weeks.reduce((sum,w)=>sum+personWeek(w,id),0); }
 export function weekTotal(data,week) { return data.people.reduce((sum,p)=>sum+personWeek(week,p.id),0); }
 export function tripTotal(data) { return data.weeks.reduce((sum,w)=>sum+weekTotal(data,w),0); }
+export function paymentBreakdown(data,{personId,weekId,month}={}){
+  const result={total:0,cash:0,gcash:0,unspecified:0,mixed:0,gcashMixed:0};
+  for(const week of data.weeks){if(weekId&&week.id!==weekId)continue;for(const person of data.people){if(personId&&person.id!==personId)continue;for(let day=0;day<5;day++){if(month&&addDays(week.start,day).slice(0,7)!==month)continue;for(const record of paymentRecords(week,person.id,day)){result.total+=record.amount;if(['cash','gcash','unspecified'].includes(record.method))result[record.method]+=record.amount;else{result.mixed+=record.amount;if(record.method.split('+').includes('gcash'))result.gcashMixed+=record.amount;}}}}}
+  return result;
+}
+export function gcashTotal(data){const result=paymentBreakdown(data);return {total:result.gcash,mixed:result.gcashMixed};}
 export function progress(data) { const total=tripTotal(data); return {total, remaining:Math.max(0,data.goalCents-total), percent:data.goalCents ? Math.min(100,total/data.goalCents*100) : 0}; }
-export function deletePerson(data,id) { data.people=data.people.filter(p=>p.id!==id); for(const w of data.weeks){delete w.entries[id];if(w.paymentMethods){delete w.paymentMethods[id];if(!Object.keys(w.paymentMethods).length)delete w.paymentMethods;}} }
+export function deletePerson(data,id) { data.people=data.people.filter(p=>p.id!==id); for(const w of data.weeks){delete w.entries[id];for(const key of ['paymentMethods','payments'])if(w[key]){delete w[key][id];if(!Object.keys(w[key]).length)delete w[key];}} }
 export function deleteWeek(data,id) { if(data.weeks.length<=1) throw new Error('Keep at least one week.'); data.weeks=data.weeks.filter(w=>w.id!==id); if(data.selectedWeekId===id)data.selectedWeekId=data.weeks[0].id; }
 export function validateData(raw) {
   const fail = message => {throw new Error('Invalid backup: '+message);};
@@ -65,7 +83,21 @@ export function validateData(raw) {
         if(values.some(v=>v!=='unspecified'))paymentMethods[key]=[...values];
       }
     }
-    return {id:w.id,start:w.start,end:w.end,entries,...(Object.keys(paymentMethods).length?{paymentMethods}:{})};
+    const payments={};
+    if(w.payments!==undefined){
+      if(!obj(w.payments))fail('invalid payment records.');
+      for(const [key,days] of Object.entries(w.payments)){
+        if(!ids.has(key)||!entries[key]||!Array.isArray(days)||days.length!==5)fail('invalid payment record owner.');
+        payments[key]=days.map((records,day)=>{
+          if(records===null)return null;
+          if(!Array.isArray(records)||records.length>500)fail('invalid payment record list.');
+          const seen=new Set();let total=0;
+          const checked=records.map(record=>{if(!obj(record)||typeof record.id!=='string'||!/^[a-zA-Z0-9-]{1,160}$/.test(record.id)||seen.has(record.id)||!cents(record.amount)||record.amount===0||!validPaymentTime(record.at)||!PAYMENT_METHODS.includes(record.method))fail('invalid payment record.');seen.add(record.id);total+=record.amount;return {id:record.id,at:record.at,amount:record.amount,method:record.method};});
+          if(total!==entries[key][day])fail('payment allocations do not match the daily amount.');return checked;
+        });
+      }
+    }
+    return {id:w.id,start:w.start,end:w.end,entries,...(Object.keys(paymentMethods).length?{paymentMethods}:{}),...(Object.keys(payments).length?{payments}:{})};
   });
   if(!weekIds.has(raw.selectedWeekId))fail('selected week does not exist.');
   return {version:1,destination:raw.destination.trim(),goalCents:raw.goalCents,theme:raw.theme,demo:raw.demo,people,weeks,selectedWeekId:raw.selectedWeekId};
