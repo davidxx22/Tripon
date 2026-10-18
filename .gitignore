@@ -4,3 +4,4 @@ outputs/
 .sites-*/
 .sites-checkout
 *.log
+dist/

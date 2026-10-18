@@ -1,21 +1,41 @@
 # Tripon
 
-**Save a little. Go together.** A mobile-first, offline-capable travel contribution tracker. Initial destination: **Samal**. Original suitcase / companion-coin logo, thin table borders, teal accents, and Light, Dark, and System themes.
+A clean group travel savings tracker. Initial destination: **Samal**. No accounts or login required.
 
-## Use the app
+**Live app:** https://tripon-travel-savings.stonykiwi.chatgpt.site
 
-- Choose **Start empty tracker** for real records, or explore the visibly labeled **demo** with four people × five ₱10 entries (₱200 in sample contributions). Demo records remain labeled in the app and JSON export. **Start empty tracker** clears demo data after confirmation; demo values are never silently converted into actual records.
-- Edit the destination and goal with the pencil or target button. A zero goal means unset. The target never adds to contributions.
-- Tap an amount to edit; tap a person's name to rename or remove them. New people appear across every week with blank contributions.
-- Create weeks and navigate with the selector or arrows. Weekly totals, each person's all-week total, and trip savings are calculated from the same entries, once each.
-- Appearance is in the header. **System** is the default; explicit selections persist and are included in backups.
-- Records are saved automatically to this browser's local storage. “Saved on this device” confirms success. A saving error means edits remain in memory: export before closing.
+## Sync across phones
 
-**This is a record, not a wallet. Tripon does not collect, transfer, verify, or hold money.** Records do not sync between people, browsers, devices, or different hosting URLs. Clearing browser data, private browsing, or browser storage eviction can erase records. Keep backups.
+1. On the phone containing the tracker to share, choose **Share group → Create shared group**. This uploads the current destination, goal, people, weeks and contributions. A copy of the previous personal tracker is retained on that device.
+2. Choose **Copy link** and send the complete group invite link privately to your group.
+3. Everyone opens that exact link, confirms **Join group**, and can install Tripon from Chrome's menu.
+
+**Anyone with a group link can view and edit its records.** Keep it private. There are no separate owner/viewer accounts. Opening the public homepage alone does not join a group. Existing local records are not uploaded automatically.
+
+Updates are checked about every five seconds while visible and on reconnecting. The group bar shows sync/pending/error/conflict states. Theme and selected week remain personal to each phone.
+
+Offline edits persist in a local queue, including after closing/reopening. Different cells merge automatically. If two phones edit the same record, **Review edits** offers export, use group records, or explicitly apply your local changes. Removed people/weeks are not silently resurrected by old edits. Reopen the app online to send/receive updates; a closed app does not continuously sync.
+
+Use one active editing tab per browser. Different phones have independent queues. Clearing browser data can erase unsynced edits and group credentials. Keep the invite link and JSON backups somewhere safe.
+
+**Tripon records contributions. It does not collect, transfer, verify, or hold money.** Shared records are stored in the hosted database and cached locally. Device-only records stay local until explicitly shared.
+
+## Tracking and backups
+
+- Start empty or explore the visibly labeled ₱10/day demo. Demo values remain samples until explicitly starting an empty tracker.
+- Tap amounts to edit; zero is allowed, negatives/invalid/overprecision values are rejected. All calculations use integer centavos. Blank cells count as zero.
+- Tap names to manage people. Each week has five consecutive calendar dates; set Day 1 and Day 5 is computed. Week numbering follows creation order. Avoid entering the same payment in overlapping weeks.
+- Weekly/person/all-week totals derive from recorded entries once each. The goal never adds to contributions.
+- Deleting people/weeks requires confirmation and removes their contributions for everyone in a shared group. At least one week is retained.
+- **Export backup** includes the tracker and local appearance, but never invite keys or sync queues. A backup does not grant access to its original group.
+- **Restore JSON** validates and confirms replacement. In a shared group it replaces records for everyone, subject to conflict checks against newer edits. Invalid files leave records unchanged.
+- **Invite link → Leave on this device** returns to the previous personal tracker without deleting the group. Sync pending edits first; export before leaving if needed.
+
+Limits: 200 people, 1,000 weeks, ₱9,999,999.99 per entry/goal, and 5 MB per backup/request.
 
 ## Run locally
 
-Install Node.js 20 or later, clone the repository, and run:
+Use **Node.js 22.13+** (Node 24 recommended). No runtime npm packages are required.
 
 ```sh
 git clone https://github.com/davidxx22/Tripon.git
@@ -23,71 +43,50 @@ cd Tripon
 npm start
 ```
 
-Open **http://127.0.0.1:4173**. The app has **no runtime dependencies** and needs no build or package installation to run. `npm run build` checks syntax, the manifest, and icon files; the deployable app is already in `dist/`.
+Open http://127.0.0.1:4173. The server serves `public/` and the real group API with a local SQLite database at ignored `work/tripon.sqlite`. Local and production databases are separate. Use hosted HTTPS on Android; plain LAN HTTP does not support the full PWA.
 
-Localhost supports service workers on the same computer. A phone visiting a computer's plain HTTP LAN address will not have normal PWA capabilities: use HTTPS hosting for Android. Do not open `index.html` directly with a `file:` URL.
-
-## Deploy over HTTPS
-
-Deploy the **contents of `dist/`**, including `sw.js`, `manifest.webmanifest`, and `assets/`, to any static HTTPS host. No environment variables, accounts inside the app, APIs, or database are needed. Relative asset paths support a subdirectory such as `/Tripon/`.
-
-- **Netlify:** drag the `dist` directory into its static/manual deploy interface, or connect the repository with no build command and publish directory `dist`.
-- **Cloudflare Pages:** connect the repository, select no framework, no build command, and output directory `dist`.
-- **GitHub Pages:** the included `.github/workflows/pages.yml` can publish `dist`. Enable Pages → GitHub Actions in repository settings, then run the workflow manually. GitHub may require a paid plan for Pages on a private repository; public static hosts above are alternatives. The workflow never changes repository visibility.
-- **Sites:** `.openai/hosting.json` binds this source to its Sites deployment. New Sites hosting is owner-private by default; this is a hosting access gate, not a Tripon user account system. Make hosting public separately if you want unauthenticated group access. That will not add record syncing.
-
-For updates, change the cache version in `dist/sw.js` whenever shell files change. The new worker caches the complete shell and waits until all older Tripon tabs/windows close, avoiding mixed app versions. Reopen to activate the update. Contributions are stored separately from the app cache and survive shell updates. Do not cache exported backups or add analytics scripts that read local storage.
-
-If deploying the GitHub Pages workflow, ensure the repository's default branch is `main`. Any branch may be chosen when manually running it. Static hosts should serve `.webmanifest` as `application/manifest+json`, JS as JavaScript, and `sw.js` without long-lived HTTP caching.
-
-## Install from Chrome on Android
-
-1. Open the deployed **HTTPS** link in Chrome and choose an empty tracker or demo.
-2. Wait for **Offline ready** in the page footer. This confirms that the complete app shell has been cached.
-3. Tap **Install app** if Chrome offers the prompt. Otherwise tap Chrome's **⋮ → Add to home screen → Install** (wording varies by Chrome version).
-4. Launch **Tripon** from the home screen. The manifest requests standalone mode. After the first successful load and offline setup, you can view and edit without a connection.
-
-Chrome decides when an install prompt is available; dismissals, prior installation, browser policy, and engagement can affect it. The button always provides fallback instructions. A normal home-screen shortcut may behave differently from a full PWA installation.
-
-## Export and restore
-
-**Export backup** downloads a `tripon-YYYY-MM-DD.json` file (`tripon-DEMO-…` for sample records). Save it somewhere durable. It contains the destination, goal in integer centavos, people and IDs, all weeks and daily entries, selected week, appearance, and demo flag. Treat it as your group's financial record.
-
-**Restore JSON** selects a backup, validates it, and shows a replacement confirmation with its destination, people, weeks, and total. Cancel keeps current records. Restore replaces the whole tracker, including theme; it does not merge records. Invalid JSON, invalid amounts/dates, unknown people, duplicate IDs, and unsupported versions are rejected before replacement. Files are limited to 5 MB. Existing unreadable data is not overwritten automatically; a recovery download is offered.
-
-## Decisions and limits
-
-- Each week contains **five consecutive calendar dates**. You set Day 1; Day 5 is four days later. Dates are date-only values and displayed without timezone drift. The first week begins today, using the device's calendar date.
-- Week numbering follows creation order. Weeks may overlap, but each is an independent record; the app sums every recorded entry once. Avoid recording the same payment in two weeks.
-- Zero is allowed; blank cells count as zero. Once you edit one day in a blank row, its other four days become explicit zero entries. Input accepts digits and an optional decimal part of one or two digits (no currency sign, grouping commas, exponents, or negatives). Maximum per entry or goal is **₱9,999,999.99**; storage limits are 200 people and 1,000 weeks. These bounds keep integer totals exact.
-- Removing a person deletes all of their entries across all weeks. Deleting a week removes that week's entries and reduces totals. At least one week is retained. Both actions require a dialog confirmation and recommend an export first.
-- Closing the first-run choice without selecting anything leaves an unsaved empty preview. The first subsequent edit saves it as a real empty tracker.
-- Export/import is manual transfer, not automatic group synchronization. Everyone using their own phone has an independent tracker.
-
-## Tests
+## Build and deploy
 
 ```sh
 npm test
 npm run build
-# Optional browser QA and asset regeneration:
+```
+
+The build embeds `public/` and the API into one Worker ESM at `dist/server/index.js`. `.openai/hosting.json` retains the Sites project and declares D1 binding **DB**. `drizzle/0000_shared_groups.sql` is a schema-only migration, applied by Sites before deployment. Future schema changes should use additive migrations and preserve existing data.
+
+Publish through the Sites source/version/deployment workflow with its public audience preserved. Sync requires a Worker and database; static-only GitHub Pages cannot provide it, so its old workflow was removed. Another Worker host needs a D1-compatible `DB` binding, the SQL migration applied once, and the built ESM fetch handler. No external backend subscription or secret API key is embedded in the app.
+
+The database stores only a SHA-256 hash of each 256-bit invite key. Clients send keys in an authorization header. Invite links keep keys in URL fragments, outside HTTP request URLs. The API exposes no group list. Reads/writes require the group key; API responses are never cached. Revision-checked updates and bounded batch receipts make retries idempotent. Shared-link access provides group editing, not identity verification or per-person permissions.
+
+The service worker caches only the app shell, never `/api/`. Increment its cache version when changing shell files. New workers wait until all older Tripon windows close. **Close all Tripon tabs/windows and reopen after this update** to activate sharing and the simplified design. Existing local `tripon.v1` records survive the update.
+
+## Install on Android
+
+Open the group invite link in Chrome, join, wait for **Offline ready**, and choose **Install app** or **⋮ → Add to home screen → Install**. Launch Tripon from the home screen. First-time joining requires internet; offline edits afterward queue until reconnecting. Appearance defaults to System with Light/Dark controls in the header.
+
+Real Android launcher, install prompt, file picker, and airplane-mode behavior still need a physical-phone check. See [TESTING.md](TESTING.md).
+
+## Optional browser tests and logo generation
+
+```sh
 npm install
 npx playwright install chromium
-npm start                 # keep running in another terminal
-npm run test:browser
+npm run test:browser  # keep npm start running separately
+npm run test:sync     # defaults to port 4174; set TRIPON_TEST_URL as needed
 npm run assets
 ```
 
-Browser tests use an isolated temporary profile; they do not touch your own Chrome records. Optional environment variables: `TRIPON_TEST_URL`, `TRIPON_CHROME` (an existing Chrome executable), `TRIPON_NODE_MODULES` (an existing package directory). See [TESTING.md](TESTING.md) for executed checks and real-phone follow-up.
+Browser tests accept `TRIPON_TEST_URL`, `TRIPON_CHROME`, and `TRIPON_NODE_MODULES`. They use fabricated contributions and isolated profiles. Production smoke tests create a separate test group.
 
-## Files and logo
+## Files
 
-- `dist/`: complete installable static app, manifest, worker, and assets.
-- `dist/assets/tripon-wordmark-light.svg` / `-dark.svg`: original logo with wordmark for light/dark backgrounds; matching 920 × 256 transparent PNGs.
-- `dist/assets/tripon-icon-light.svg` / `-dark.svg`: compact icon; matching 512 × 512 transparent PNGs. The teal mark works in both themes.
-- `dist/assets/icon.svg`: header and favicon mark.
-- `dist/assets/icon-192.png`, `icon-512.png`: regular installed icons.
-- `dist/assets/icon-maskable-512.png`: opaque maskable icon with safe padding; its source SVG is included.
-- `scripts/generate-assets.mjs`: reproducible vector design and PNG generation with Sharp.
-- `tests/`: money/date/schema tests and browser workflow tests.
+- `public/`: UI, calculation/schema logic, sync client, manifest, worker, logos/icons.
+- `worker/api.js`: group creation, authorized reads, durable conflict-aware updates.
+- `drizzle/`: database schema migration and journal.
+- `scripts/`: build, local API/SQLite server, asset generation and checks.
+- `tests/`: unit/API and single-/two-device browser tests.
+- `public/assets/tripon-wordmark-light.svg` / `-dark.svg`: wordmarks with matching transparent PNGs.
+- `public/assets/tripon-icon-light.svg` / `-dark.svg`: compact marks with matching transparent PNGs.
+- `public/assets/icon-192.png`, `icon-512.png`, `icon-maskable-512.png`: installation icons with safe padding.
 
-Logo concept: a friendly travel case contains two companion coins and a rising route arrow — saving toward a shared destination. PNG wordmarks render system fonts during generation; SVG wordmarks include a portable font stack.
+The original logo combines a travel case, two companion coins, and a rising route arrow. It remains in the simplified header, favicon, and installed icons.

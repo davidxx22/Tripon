@@ -1,0 +1,23 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {newTracker,tripTotal,blankWeek} from '../public/core.js';
+import {changes,applyChanges,SyncConflict,shared} from '../public/sync-core.js';
+import {api} from '../worker/api.js';
+import {localDB} from '../scripts/local-db.mjs';
+test('independent daily edits merge without clobbering other phones',()=>{const base=shared(newTracker()),a=structuredClone(base),b=structuredClone(base),id=base.people[0].id,w=base.weeks[0].id;a.weeks[0].entries[id]=[100,0,0,0,0];b.weeks[0].entries[id]=[0,200,0,0,0];const result=applyChanges(applyChanges(base,changes(base,a)),changes(base,b));assert.equal(tripTotal(result),300);assert.equal(result.weeks[0].entries[id][0],100);assert.equal(result.weeks[0].entries[id][1],200);});
+test('same daily entry causes explicit conflict and force only changes desired fields',()=>{const base=shared(newTracker()),a=structuredClone(base),b=structuredClone(base),id=base.people[0].id;a.weeks[0].entries[id]=[100,0,0,0,0];b.weeks[0].entries[id]=[200,0,0,0,0];const remote=applyChanges(base,changes(base,a));assert.throws(()=>applyChanges(remote,changes(base,b)),SyncConflict);remote.destination='Updated by group';const result=applyChanges(remote,changes(base,b),true);assert.equal(tripTotal(result),200);assert.equal(result.destination,'Updated by group');});
+test('theme and selected week remain device preferences',()=>{const d=newTracker(),before=shared(d);d.theme='dark';d.weeks.push(blankWeek());const after=shared(d);d.selectedWeekId=d.weeks[1].id;assert.deepEqual(changes(after,shared(d)),[]);assert.equal(changes(before,after).filter(o=>o.type==='trip').length,0);});
+test('deletion conflicts if remote contributions changed and never resurrects missing people',()=>{const base=shared(newTracker()),local=structuredClone(base),remote=structuredClone(base),id=base.people[0].id;local.people.shift();remote.weeks[0].entries[id]=[500,0,0,0,0];assert.throws(()=>applyChanges(remote,changes(base,local)),SyncConflict);const edit=structuredClone(base);edit.weeks[0].entries[id]=[100,0,0,0,0];const removed=applyChanges(base,changes(base,local));assert.throws(()=>applyChanges(removed,changes(base,edit),true),/removed/);});
+test('restore can replace people and weeks without duplicate totals',()=>{const a=shared(newTracker(true)),b=shared(newTracker());const result=applyChanges(a,changes(a,b));assert.equal(tripTotal(result),0);assert.equal(result.people.length,4);assert.equal(result.weeks.length,1);assert.equal(result.demo,false);});
+test('API enforces bearer link, durable writes, CAS merge, and idempotent retries',async()=>{
+  const DB=localDB(':memory:');const env={DB};const base='https://tripon.test';
+  const call=async(path,method='GET',body,key,origin)=>{const response=await api(new Request(base+path,{method,headers:{...(key?{authorization:'Bearer '+key}:{}),...(origin?{origin}:{})},...(body?{body:JSON.stringify(body)}:{})}),env);return {status:response.status,body:await response.json()};};
+  const created=await call('/api/groups','POST',{data:newTracker()});assert.equal(created.status,201);assert.match(created.body.key,/^[a-f0-9]{64}$/);const {id,key,data}=created.body,path='/api/groups/'+id;
+  assert.equal((await call(path)).status,403);assert.equal((await call(path,'GET',null,'0'.repeat(64))).status,404);assert.equal((await call(path,'GET',null,key,'https://evil.test')).status,403);
+  const a=structuredClone(data),b=structuredClone(data),person=data.people[0].id;a.weeks[0].entries[person]=[100,0,0,0,0];b.weeks[0].entries[person]=[0,200,0,0,0];const batchA={id:crypto.randomUUID(),ops:changes(data,a)},batchB={id:crypto.randomUUID(),ops:changes(data,b)};
+  const [ra,rb]=await Promise.all([call(path,'PATCH',batchA,key),call(path,'PATCH',batchB,key)]);assert.equal(ra.status,200);assert.equal(rb.status,200);const latest=await call(path,'GET',null,key);assert.equal(tripTotal(latest.body.data),300);assert.equal(latest.body.revision,3);
+  const repeated=await call(path,'PATCH',batchA,key);assert.equal(repeated.body.revision,3);assert.equal(tripTotal(repeated.body.data),300);
+  const c=structuredClone(data);c.weeks[0].entries[person]=[900,0,0,0,0];const conflict=await call(path,'PATCH',{id:crypto.randomUUID(),ops:changes(data,c)},key);assert.equal(conflict.status,409);assert.equal(conflict.body.conflicts.length,1);
+  assert.equal((await call(path,'PATCH',{id:crypto.randomUUID(),ops:[{type:'trip',id:'__proto__',before:null,value:'bad'}]},key)).status,409);
+  DB.close();
+});

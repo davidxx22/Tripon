@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {amount,money,newTracker,blankWeek,addDays,validDate,personWeek,personTotal,weekTotal,tripTotal,progress,deletePerson,deleteWeek,validateData} from '../dist/core.js';
+import {amount,money,newTracker,blankWeek,addDays,validDate,personWeek,personTotal,weekTotal,tripTotal,progress,deletePerson,deleteWeek,validateData} from '../public/core.js';
 test('amounts use exact centavos, allow zero and reject invalid input',()=>{
   assert.equal(amount('0'),0);assert.equal(amount('10.5'),1050);assert.equal(amount('0.29'),29);assert.equal(amount('001.01'),101);assert.equal(money(12345),'₱123.45');
   for(const value of ['','-1','NaN','Infinity','1e3','10.999','.1','1.','1,000','₱10','+1','9999999999'])assert.throws(()=>amount(value));
@@ -17,3 +17,4 @@ test('import rejects malformed, duplicate, unknown, and unsafe records',()=>{
   for(const mutate of mutations){const d=newTracker();mutate(d);assert.throws(()=>validateData(d));}
 });
 test('import sanitizes unknown metadata and preserves text as text',()=>{const d=newTracker();d.extra='<script>';d.people[0].name='<img src=x>';const clean=validateData(d);assert.equal(clean.extra,undefined);assert.equal(clean.people[0].name,'<img src=x>');});
+
