@@ -33,6 +33,6 @@ export class GroupSync{
     if(keepMine){for(const batch of this.state.queue)batch.force=true;this.conflict=null;this.persist();await this.flush();}
     else {const response=await this.fetchInvite(this.state);this.state.queue=[];this.last=shared(response.data);this.state.revision=response.revision;this.conflict=null;this.persist();this.onData(response.data);this.status('Group synced');}
   }
-  leave(){if(this.state?.queue.length)throw new Error('Sync or export pending edits before leaving.');const personal=localStorage.getItem('tripon.personal.v1');this.state=null;this.conflict=null;localStorage.removeItem(KEY);this.status('Only this device');return personal?JSON.parse(personal):null;}
+  leave(discardPending=false){if(this.state?.queue.length&&!discardPending)throw new Error('Sync pending edits or confirm discarding them before leaving.');const personal=localStorage.getItem('tripon.personal.v1');this.state=null;this.conflict=null;localStorage.removeItem(KEY);this.status('Only this device');return personal?JSON.parse(personal):null;}
   start(){this.status(this.state?'Connecting to group…':'Only this device');if(this.state)void this.flush();setInterval(()=>{if(!document.hidden)void this.flush();},5000);window.addEventListener('online',()=>void this.flush());window.addEventListener('offline',()=>this.status(this.state?.queue.length?'Offline · edits queued':this.state?'Offline · showing saved group':'Only this device'));document.addEventListener('visibilitychange',()=>{if(!document.hidden)void this.flush();});}
 }

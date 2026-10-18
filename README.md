@@ -29,7 +29,7 @@ Use one active editing tab per browser. Different phones have independent queues
 - Deleting people/weeks requires confirmation and removes their contributions for everyone in a shared group. At least one week is retained.
 - **Export backup** includes the tracker and local appearance, but never invite keys or sync queues. A backup does not grant access to its original group.
 - **Restore JSON** validates and confirms replacement. In a shared group it replaces records for everyone, subject to conflict checks against newer edits. Invalid files leave records unchanged.
-- **Invite link → Leave on this device** returns to the previous personal tracker without deleting the group. Sync pending edits first; export before leaving if needed.
+- **Invite link → Leave on this device** returns to the previous personal tracker without deleting the group. Leaving with pending edits requires confirmation that they will be discarded locally. Export a backup first if needed.
 
 Limits: 200 people, 1,000 weeks, ₱9,999,999.99 per entry/goal, and 5 MB per backup/request.
 
