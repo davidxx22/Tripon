@@ -52,3 +52,17 @@ test('person queries and monthly totals use each entry date across week boundari
  assert.equal(command('Show David total month 2026-11',t).month,'2026-11');assert.throws(()=>command('Show David total month 2026-13',t),/valid month/);assert.throws(()=>command('How much does Azel payment total',t),/No person/);
  const before=JSON.stringify(t);command('Show David total week 2',t);assert.equal(JSON.stringify(t),before);
 });
+test('specific-date weeks parse full dates and require confirmation without losing records',async()=>{
+ const {parseAssistantCommand:command,applyAssistantAction:act,assistantDate}=await import('../public/assistant.js');
+ for(const text of ['September 28, 2026','Sep 28 2026','28 September 2026','2026-09-28'])assert.equal(assistantDate(text),'2026-09-28');
+ for(const text of ['09/10/26','February 30, 2026','2026-02-29','Jan 1','Foo 28 2026'])assert.throws(()=>assistantDate(text));
+ const t=newTracker(true),before=JSON.stringify(t),p=command('Add week starting September 28, 2026',t);assert.equal(p.start,'2026-09-28');assert.equal(p.end,'2026-10-02');assert.equal(JSON.stringify(t),before);
+ act(t,p);assert.equal(t.weeks.length,2);assert.equal(tripTotal(t),20000);assert.equal(t.weeks[1].start,'2026-09-28');assert.throws(()=>act(t,p),/already/);
+ assert.throws(()=>command('Add week from 9998-12-28',t));
+});
+test('specific-date contributions target one daily cell and reject missing or ambiguous dates',async()=>{
+ const {parseAssistantCommand:command}=await import('../public/assistant.js');const t=newTracker();t.weeks=[blankWeek('2026-09-28')];t.selectedWeekId=t.weeks[0].id;
+ const c=command('David paid 50 pesos on October 1, 2026',t);assert.deepEqual(c.days,[3]);const plan=preview(t,c);assert.deepEqual(t.weeks[0].entries,{});apply(t,plan);assert.deepEqual(t.weeks[0].entries[t.people[0].id],[0,0,0,5000,0]);
+ assert.throws(()=>command('David 10 on 2026-10-03',t),/No matching week/);assert.throws(()=>command('David 10 on 2026-02-30',t),/not valid/);
+ t.weeks.push(blankWeek('2026-10-01'));assert.throws(()=>command('David 10 on 2026-10-01',t),/overlapping/);assert.equal(command('David 10 on 2026-10-01 in week 2',t).weekId,t.weeks[1].id);
+});

@@ -14,6 +14,8 @@ Open **Tripon assistant** and enter one simple command at a time:
 - `Kian 25 on day 3` fills a single day in the selected week.
 - `Add person Azel` adds a person with no contributions.
 - `Add next week` creates five days after the latest saved week's end, then selects it.
+- `Add week starting September 28, 2026` or `Add week from 2026-09-28` creates five days starting on a specific date (include the year).
+- `David 50 on 2026-10-01` records one day in an existing week containing that date. If weeks overlap, specify `in week 2`. Missing weeks, invalid dates, and duplicate start dates show an error without changing records.
 - `How much does Azel payment total?` shows all-time, selected-week, and current-month records.
 - `Show Azel total week 2` or `Show Azel total month 2026-10` asks about a specific period.
 
