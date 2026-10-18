@@ -20,7 +20,7 @@ export function newTracker(demo = false) {
   const people = ['David','Vince','Deniele','Kian'].map(name => ({id:uid(),name}));
   const week = blankWeek();
   if (demo) for (const p of people) week.entries[p.id] = Array(5).fill(1000);
-  return {version:1, destination:'Samal', goalCents:0, theme:'system', demo, people, weeks:[week], selectedWeekId:week.id};
+  return {version:1, destination:'Samal', goalCents:0, theme:'light', demo, people, weeks:[week], selectedWeekId:week.id};
 }
 export function personWeek(week, id) { return (week.entries[id] || []).reduce((sum,n)=>sum+n,0); }
 export function personTotal(data,id) { return data.weeks.reduce((sum,w)=>sum+personWeek(w,id),0); }

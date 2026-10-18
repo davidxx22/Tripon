@@ -74,7 +74,7 @@ The service worker caches only the app shell, never `/api/`. Increment its cache
 
 ## Install on Android
 
-Open the group invite link in Chrome, join, wait for **Offline ready**, and choose **Install app** or **⋮ → Add to home screen → Install**. Launch Tripon from the home screen. First-time joining requires internet; offline edits afterward queue until reconnecting. Appearance defaults to System with Light/Dark controls in the header.
+Open the group invite link in Chrome, join, wait for **Offline ready**, and choose **Install app** or **⋮ → Add to home screen → Install**. Launch Tripon from the home screen. First-time joining requires internet; offline edits afterward queue until reconnecting. Appearance uses a **Dark mode** switch in the header: on for dark, off for light. The selection is saved on each device; new trackers start in light mode. Existing dark/light choices are preserved. Older System backup preferences open in light mode.
 
 Real Android launcher, install prompt, file picker, and airplane-mode behavior still need a physical-phone check. See [TESTING.md](TESTING.md).
 

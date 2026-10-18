@@ -39,3 +39,9 @@ Desktop emulation cannot establish Android installation eligibility, the operati
 - 27 unit/API tests pass. Added tests verify other trips remain byte-for-byte unchanged by deletion, last-trip deletion yields a valid empty workspace, concurrent changes to other trips survive, conflicts on the deleted trip require review, and stale offline edits cannot resurrect it.
 - Five deletion browser workflows cover cancellation; named group-wide confirmation; a second phone viewing the removed trip falling back to the survivor; exact survivor people/weeks/goals/entries; offline deletion surviving reload and later syncing; deleting the last trip; rejecting a stale offline edit; and adding a new shared trip from the empty state.
 - Delete Trip is available through the destination pencil/settings dialog. Existing backups can restore deleted records; deletion does not revoke the group invite link.
+
+## Appearance switch update
+
+The appearance dropdown is replaced with an accessible Dark mode switch. On means dark; off means light. New trackers and older System preferences open in light mode; existing explicit dark/light choices are preserved. Backups still accept legacy System values for compatibility, but there is no System UI option and changing the device theme no longer changes the app.
+
+Existing browser checks now operate the switch and verify light/dark rendering, persistence after reopening, backup restoration, and independence from the device theme.
