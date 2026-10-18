@@ -14,7 +14,7 @@ export class GroupSync{
   async flush(){
     if(!this.state||this.busy||this.conflict||this.paused)return;
     if(!navigator.onLine){this.status(this.state.queue.length?'Offline · edits queued':'Offline · showing saved group');return;}
-    this.busy=true;try{
+    let again=false;this.busy=true;try{
       let response;
       while(this.state.queue.length&&!this.paused){const batch=this.state.queue[0];this.status('Syncing…');response=await this.request('/api/groups/'+this.state.id,{method:'PATCH',body:JSON.stringify(batch)});this.state.queue.shift();this.state.revision=response.revision;this.persist();}
       if(this.paused)return;
@@ -22,11 +22,11 @@ export class GroupSync{
       if(this.paused)return;
       let merged=shared(response.data);for(const batch of this.state.queue)merged=applyChanges(merged,batch.ops,true);
       const unchanged=JSON.stringify(shared(this.getData()))===JSON.stringify(merged);
-      this.last=merged;this.persist();if(!unchanged)this.onData(merged);this.status('Group synced');
+      this.last=merged;this.persist();if(!unchanged)this.onData(merged);again=this.state.queue.length>0;this.status(again?'Syncing…':'Group synced');
     }catch(error){
       if(error.status===409){this.conflict=error.body;this.status('Conflicting edits · review changes');}
       else this.status(navigator.onLine?(error.status===403||error.status===404?'Group link unavailable · local copy kept':'Could not sync · will retry'):'Offline · edits queued');
-    }finally{this.busy=false;}
+    }finally{this.busy=false;if(again&&!this.paused&&!this.conflict)queueMicrotask(()=>void this.flush());}
   }
   async resolve(keepMine){
     if(!this.conflict)return;
